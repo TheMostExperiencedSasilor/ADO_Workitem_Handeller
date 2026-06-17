@@ -1,5 +1,6 @@
 const output = document.querySelector('#output');
 const healthBadge = document.querySelector('#healthBadge');
+const setupStatus = document.querySelector('#setupStatus');
 const readIds = document.querySelector('#readIds');
 
 function parseIds() {
@@ -17,6 +18,23 @@ function selectedRules() {
   return rules;
 }
 
+function setupPayload() {
+  return {
+    adoOrganization: document.querySelector('#adoOrganization').value,
+    adoProject: document.querySelector('#adoProject').value,
+    adoPat: document.querySelector('#adoPat').value,
+    aiProvider: 'github',
+    aiBaseUrl: document.querySelector('#aiBaseUrl').value,
+    aiModel: document.querySelector('#aiModel').value,
+    githubToken: document.querySelector('#githubToken').value,
+  };
+}
+
+function clearSecretInputs() {
+  document.querySelector('#adoPat').value = '';
+  document.querySelector('#githubToken').value = '';
+}
+
 function writePayload() {
   const parentText = document.querySelector('#parentId').value.trim();
   return {
@@ -30,6 +48,12 @@ function writePayload() {
 
 function show(data) {
   output.textContent = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
+}
+
+function setSetupStatus(text, state = '') {
+  setupStatus.textContent = text;
+  setupStatus.classList.remove('ok', 'error');
+  if (state) setupStatus.classList.add(state);
 }
 
 async function api(path, options = {}) {
@@ -54,6 +78,41 @@ async function checkHealth() {
     healthBadge.classList.add('error');
   }
 }
+
+async function checkSetup() {
+  try {
+    const status = await api('/api/setup/status');
+    const ready = status.adoOrganizationConfigured
+      && status.adoProjectConfigured
+      && status.adoPatConfigured
+      && status.aiBaseUrlConfigured
+      && status.aiModelConfigured
+      && status.githubTokenConfigured;
+    setSetupStatus(ready ? 'Configured' : 'Missing values', ready ? 'ok' : 'error');
+    show(status);
+  } catch (error) {
+    setSetupStatus('Setup check failed', 'error');
+    show(error.message);
+  }
+}
+
+document.querySelector('#saveSetupButton').addEventListener('click', async () => {
+  try {
+    show('Saving setup to backend .env...');
+    const result = await api('/api/setup', {
+      method: 'POST',
+      body: JSON.stringify(setupPayload()),
+    });
+    clearSecretInputs();
+    setSetupStatus('Saved', 'ok');
+    show(result);
+  } catch (error) {
+    setSetupStatus('Save failed', 'error');
+    show(error.message);
+  }
+});
+
+document.querySelector('#checkSetupButton').addEventListener('click', checkSetup);
 
 document.querySelector('#readButton').addEventListener('click', async () => {
   try {
@@ -164,3 +223,4 @@ chatForm.addEventListener('submit', async (event) => {
 });
 
 checkHealth();
+checkSetup();
