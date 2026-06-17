@@ -26,6 +26,25 @@ class AdoClient:
             f"{quote(self.config.ado_project)}"
         )
 
+    def test_connection(self) -> dict[str, Any]:
+        url = (
+            f"https://dev.azure.com/{self.config.ado_organization}/"
+            f"_apis/projects/{quote(self.config.ado_project, safe='')}"
+        )
+        response = requests.get(
+            url,
+            headers=self.headers,
+            params={"api-version": self.config.ado_api_version},
+            timeout=15,
+        )
+        response.raise_for_status()
+        data = response.json()
+        return {
+            "id": data.get("id"),
+            "name": data.get("name"),
+            "state": data.get("state"),
+        }
+
     def read_work_items(self, ids: list[int]) -> list[dict[str, Any]]:
         if not ids:
             return []
