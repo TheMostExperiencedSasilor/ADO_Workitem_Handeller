@@ -4,6 +4,12 @@ const adoConnectionBadge = document.querySelector('#adoConnectionBadge');
 const setupStatus = document.querySelector('#setupStatus');
 const readIds = document.querySelector('#readIds');
 
+const creatableTabTypes = {
+  feature: 'Feature',
+  task: 'Task',
+  'user-story': 'User Story',
+};
+
 function parseIds() {
   return readIds.value
     .split(',')
@@ -63,6 +69,24 @@ function setAdoConnection(text, state = '') {
   if (state) adoConnectionBadge.classList.add(state);
 }
 
+function activateWorkTab(tabName) {
+  document.querySelectorAll('.work-tab').forEach((tab) => {
+    const active = tab.dataset.workTab === tabName;
+    tab.classList.toggle('active', active);
+    tab.setAttribute('aria-selected', String(active));
+  });
+
+  document.querySelectorAll('.work-page').forEach((page) => {
+    const active = page.dataset.workPage === tabName;
+    page.classList.toggle('active', active);
+    page.hidden = !active;
+  });
+
+  if (creatableTabTypes[tabName]) {
+    document.querySelector('#workItemType').value = creatableTabTypes[tabName];
+  }
+}
+
 async function api(path, options = {}) {
   const response = await fetch(path, {
     headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
@@ -119,6 +143,10 @@ async function checkSetup() {
     show(error.message);
   }
 }
+
+document.querySelectorAll('.work-tab').forEach((tab) => {
+  tab.addEventListener('click', () => activateWorkTab(tab.dataset.workTab));
+});
 
 document.querySelector('#saveSetupButton').addEventListener('click', async () => {
   try {
