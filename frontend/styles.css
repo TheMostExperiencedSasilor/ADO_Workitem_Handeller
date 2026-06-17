@@ -85,9 +85,41 @@ h2 {
   min-width: 0;
 }
 
+.setup-panel,
 .write-panel,
 .output-panel {
   grid-column: span 3;
+}
+
+.panel-heading-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.mini-status {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 5px 9px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.mini-status.ok {
+  color: #0f6b3f;
+  border-color: #95d5b2;
+  background: #ecfdf3;
+}
+
+.mini-status.error {
+  color: var(--danger);
+  border-color: #f3aaa4;
+  background: #fff1f0;
 }
 
 label {
@@ -270,6 +302,7 @@ pre {
     padding: 0 18px 32px;
   }
 
+  .setup-panel,
   .write-panel,
   .output-panel {
     grid-column: auto;
