@@ -23,11 +23,11 @@ Browser UI
 
 - `app.py`: Flask app factory, route registration, frontend hosting.
 - `config.py`: environment variable loading and validation.
-- `services/ado_client.py`: Azure DevOps REST API read/create/update operations.
+- `services/ado_client.py`: Azure DevOps REST API read/create/update/connection-test operations.
 - `services/ai_client.py`: AI analysis, drafting, and chat calls.
 - `services/work_item_builder.py`: validates write payloads and prepares ADO fields.
 - `rules/writing_rules.py`: deterministic SMART and split rules.
-- `routes/setup_routes.py`: local setup status and `.env` writing endpoint.
+- `routes/setup_routes.py`: local setup status, `.env` writing, and ADO connection status endpoints.
 - `routes/work_item_routes.py`: work item read/analyze/draft/create/update endpoints.
 - `routes/chat_routes.py`: floating chatbox endpoint.
 
@@ -35,6 +35,7 @@ Browser UI
 
 - `GET /api/health`
 - `GET /api/setup/status`
+- `GET /api/setup/ado-connection`
 - `POST /api/setup`
 - `POST /api/work-items/read`
 - `POST /api/work-items/analyze`
