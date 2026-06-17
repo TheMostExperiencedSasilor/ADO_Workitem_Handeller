@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ADO Work Item AI Assistant</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="app-header">
+    <div>
+      <p class="eyebrow">Azure DevOps helper</p>
+      <h1>ADO Work Item AI Assistant</h1>
+    </div>
+    <span id="healthBadge" class="status-badge">Checking backend</span>
+  </header>
+
+  <main class="layout">
+    <section class="panel">
+      <h2>Read work items</h2>
+      <label for="readIds">Work item IDs</label>
+      <input id="readIds" type="text" placeholder="12345, 67890">
+      <button id="readButton">Read from ADO</button>
+    </section>
+
+    <section class="panel">
+      <h2>Analyze</h2>
+      <label for="analysisInstruction">Analysis instruction</label>
+      <textarea id="analysisInstruction" rows="4" placeholder="Find missing acceptance criteria and suggest child tasks"></textarea>
+      <button id="analyzeButton">Analyze selected IDs</button>
+    </section>
+
+    <section class="panel write-panel">
+      <h2>Create work item</h2>
+      <div class="field-row">
+        <div>
+          <label for="workItemType">Type</label>
+          <select id="workItemType">
+            <option>Task</option>
+            <option>User Story</option>
+            <option>Feature</option>
+          </select>
+        </div>
+        <div>
+          <label for="parentId">Parent ID</label>
+          <input id="parentId" type="text" placeholder="Optional">
+        </div>
+      </div>
+      <label for="title">Title</label>
+      <input id="title" type="text" placeholder="Clear work item title">
+      <label for="description">Description</label>
+      <textarea id="description" rows="5" placeholder="Problem, expected outcome, constraints"></textarea>
+      <div class="checkbox-row">
+        <label><input id="ruleSmart" type="checkbox" checked> SMART table</label>
+        <label><input id="ruleSplit" type="checkbox"> Split one into three</label>
+      </div>
+      <button id="createButton">Create in ADO</button>
+    </section>
+
+    <section class="panel output-panel">
+      <h2>Output</h2>
+      <pre id="output">Ready.</pre>
+    </section>
+  </main>
+
+  <button id="chatToggle" class="chat-toggle">AI</button>
+  <aside id="chatbox" class="chatbox hidden" aria-label="Floating AI chatbox">
+    <header>
+      <strong>AI Assistant</strong>
+      <button id="chatClose" aria-label="Close chat">x</button>
+    </header>
+    <div id="chatMessages" class="chat-messages"></div>
+    <form id="chatForm" class="chat-form">
+      <input id="chatInput" type="text" placeholder="Ask about ADO work items">
+      <button type="submit">Send</button>
+    </form>
+  </aside>
+
+  <script src="app.js"></script>
+</body>
+</html>
