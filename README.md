@@ -12,6 +12,7 @@ A lightweight Python + HTML/CSS/JavaScript assistant for reading Azure DevOps wo
 - Apply writing rules such as SMART checks and splitting one large item into three smaller items.
 - Includes a floating AI chatbox in the frontend.
 - Includes a local setup section for entering ADO and AI settings.
+- Shows an `ADO connected` frontend notification after the backend verifies the saved ADO settings.
 - Keeps all secrets in backend `.env` only. No PAT or GitHub token is exposed to frontend code.
 
 ## Project Structure
@@ -84,7 +85,7 @@ AI model
 GitHub / AI token
 ```
 
-The setup section saves values into `backend/.env`. Password fields are cleared after saving and token values are never returned to the frontend.
+The setup section saves values into `backend/.env`. Password fields are cleared after saving and token values are never returned to the frontend. If the backend can reach the configured ADO project, the header shows `ADO connected`.
 
 ## Manual Setup Alternative
 
