@@ -17,6 +17,17 @@ function selectedRules() {
   return rules;
 }
 
+function writePayload() {
+  const parentText = document.querySelector('#parentId').value.trim();
+  return {
+    type: document.querySelector('#workItemType').value,
+    title: document.querySelector('#title').value,
+    description: document.querySelector('#description').value,
+    parentId: parentText ? Number(parentText) : null,
+    rules: selectedRules(),
+  };
+}
+
 function show(data) {
   output.textContent = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
 }
@@ -71,19 +82,44 @@ document.querySelector('#analyzeButton').addEventListener('click', async () => {
   }
 });
 
+document.querySelector('#draftButton').addEventListener('click', async () => {
+  try {
+    show('Drafting work items...');
+    show(await api('/api/work-items/draft', {
+      method: 'POST',
+      body: JSON.stringify({
+        ids: parseIds(),
+        request: document.querySelector('#draftRequest').value,
+        rules: selectedRules(),
+      }),
+    }));
+  } catch (error) {
+    show(error.message);
+  }
+});
+
 document.querySelector('#createButton').addEventListener('click', async () => {
   try {
     show('Creating work item...');
-    const parentText = document.querySelector('#parentId').value.trim();
     show(await api('/api/work-items/create', {
       method: 'POST',
-      body: JSON.stringify({
-        type: document.querySelector('#workItemType').value,
-        title: document.querySelector('#title').value,
-        description: document.querySelector('#description').value,
-        parentId: parentText ? Number(parentText) : null,
-        rules: selectedRules(),
-      }),
+      body: JSON.stringify(writePayload()),
+    }));
+  } catch (error) {
+    show(error.message);
+  }
+});
+
+document.querySelector('#updateButton').addEventListener('click', async () => {
+  try {
+    const updateId = document.querySelector('#updateId').value.trim();
+    if (!updateId) {
+      throw new Error('Update ID is required for edit.');
+    }
+    show('Updating work item...');
+    show(await api(`/api/work-items/${Number(updateId)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(writePayload()),
     }));
   } catch (error) {
     show(error.message);
