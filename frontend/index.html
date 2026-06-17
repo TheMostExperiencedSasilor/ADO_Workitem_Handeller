@@ -16,6 +16,45 @@
   </header>
 
   <main class="layout">
+    <section class="panel setup-panel">
+      <div class="panel-heading-row">
+        <h2>Setup</h2>
+        <span id="setupStatus" class="mini-status">Not checked</span>
+      </div>
+      <div class="field-row">
+        <div>
+          <label for="adoOrganization">ADO organization</label>
+          <input id="adoOrganization" type="text" placeholder="your-org">
+        </div>
+        <div>
+          <label for="adoProject">ADO project</label>
+          <input id="adoProject" type="text" placeholder="your-project">
+        </div>
+        <div>
+          <label for="adoPat">ADO PAT</label>
+          <input id="adoPat" type="password" autocomplete="off" placeholder="Saved to backend .env only">
+        </div>
+      </div>
+      <div class="field-row">
+        <div>
+          <label for="aiBaseUrl">AI base URL</label>
+          <input id="aiBaseUrl" type="text" value="https://models.github.ai/inference">
+        </div>
+        <div>
+          <label for="aiModel">AI model</label>
+          <input id="aiModel" type="text" value="openai/gpt-4.1-mini">
+        </div>
+        <div>
+          <label for="githubToken">GitHub / AI token</label>
+          <input id="githubToken" type="password" autocomplete="off" placeholder="Saved to backend .env only">
+        </div>
+      </div>
+      <div class="action-row">
+        <button id="saveSetupButton">Save setup</button>
+        <button id="checkSetupButton" class="secondary-button">Check setup</button>
+      </div>
+    </section>
+
     <section class="panel">
       <h2>Read work items</h2>
       <label for="readIds">Work item IDs</label>
