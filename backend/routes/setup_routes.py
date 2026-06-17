@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 from dotenv import set_key
@@ -47,11 +48,12 @@ def save_setup():
         value = str(payload.get(payload_key, "")).strip()
         if value:
             set_key(str(ENV_PATH), env_key, value)
+            os.environ[env_key] = value
             saved_keys.append(env_key)
 
     return jsonify(
         {
-            "message": "Setup saved to backend .env. Restart the backend if existing requests still use old values.",
+            "message": "Setup saved to backend .env and applied to the running backend.",
             "savedKeys": saved_keys,
             "tokenValuesReturned": False,
         }
