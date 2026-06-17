@@ -51,6 +51,13 @@ h2 {
   margin-bottom: 16px;
 }
 
+.status-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
 .status-badge {
   padding: 8px 12px;
   border: 1px solid var(--border);
@@ -63,11 +70,13 @@ h2 {
 .status-badge.ok {
   color: #0f6b3f;
   border-color: #95d5b2;
+  background: #ecfdf3;
 }
 
 .status-badge.error {
   color: var(--danger);
   border-color: #f3aaa4;
+  background: #fff1f0;
 }
 
 .layout {
@@ -295,6 +304,10 @@ pre {
     align-items: flex-start;
     flex-direction: column;
     padding: 22px 18px 16px;
+  }
+
+  .status-row {
+    justify-content: flex-start;
   }
 
   .layout {
