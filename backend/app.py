@@ -5,6 +5,7 @@ from flask_cors import CORS
 
 from config import AppConfig
 from routes.chat_routes import chat_bp
+from routes.setup_routes import setup_bp
 from routes.work_item_routes import work_items_bp
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
@@ -15,6 +16,7 @@ def create_app() -> Flask:
     app = Flask(__name__, static_folder=None)
     CORS(app, resources={r"/api/*": {"origins": "*"}})
 
+    app.register_blueprint(setup_bp)
     app.register_blueprint(work_items_bp)
     app.register_blueprint(chat_bp)
 
