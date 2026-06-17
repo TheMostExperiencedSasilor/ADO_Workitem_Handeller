@@ -133,13 +133,22 @@ button:hover {
   background: var(--accent-dark);
 }
 
+.secondary-button {
+  background: #344054;
+}
+
+.secondary-button:hover {
+  background: #1d2939;
+}
+
 .field-row {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
 }
 
-.checkbox-row {
+.checkbox-row,
+.action-row {
   display: flex;
   flex-wrap: wrap;
   gap: 16px;
