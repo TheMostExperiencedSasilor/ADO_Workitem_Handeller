@@ -14,6 +14,7 @@ The frontend never talks directly to Azure DevOps or the AI provider. It only ca
 ```text
 Browser UI
   -> Flask API
+    -> backend/.env for local setup values
     -> Azure DevOps REST API
     -> AI chat/completions endpoint
 ```
@@ -26,12 +27,15 @@ Browser UI
 - `services/ai_client.py`: AI analysis, drafting, and chat calls.
 - `services/work_item_builder.py`: validates write payloads and prepares ADO fields.
 - `rules/writing_rules.py`: deterministic SMART and split rules.
+- `routes/setup_routes.py`: local setup status and `.env` writing endpoint.
 - `routes/work_item_routes.py`: work item read/analyze/draft/create/update endpoints.
 - `routes/chat_routes.py`: floating chatbox endpoint.
 
 ## API Endpoints
 
 - `GET /api/health`
+- `GET /api/setup/status`
+- `POST /api/setup`
 - `POST /api/work-items/read`
 - `POST /api/work-items/analyze`
 - `POST /api/work-items/draft`
