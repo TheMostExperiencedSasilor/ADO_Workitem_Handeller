@@ -10,6 +10,7 @@ A lightweight Python + HTML/CSS/JavaScript assistant for reading Azure DevOps wo
 - Create or edit Azure DevOps work items such as Task, User Story, and Feature.
 - Generate new work independently or from analyzed source work items.
 - Apply writing rules such as SMART checks and splitting one large item into three smaller items.
+- Includes ADO-style work item type tabs for Feature, Objective, Post Development Bug, Task, Test Case, and User Story page shells.
 - Includes a floating AI chatbox in the frontend.
 - Includes a local setup section for entering ADO and AI settings.
 - Shows an `ADO connected` frontend notification after the backend verifies the saved ADO settings.
@@ -86,6 +87,19 @@ GitHub / AI token
 ```
 
 The setup section saves values into `backend/.env`. Password fields are cleared after saving and token values are never returned to the frontend. If the backend can reach the configured ADO project, the header shows `ADO connected`.
+
+## Work Item Page Tabs
+
+The frontend includes page shells for:
+
+- Feature
+- Objective
+- Post Development Bug
+- Task
+- Test Case
+- User Story
+
+These are placeholders for the next design pass. Selecting Feature, Task, or User Story also syncs the create/edit type selector.
 
 ## Manual Setup Alternative
 
