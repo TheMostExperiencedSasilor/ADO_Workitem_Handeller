@@ -58,6 +58,93 @@
       </div>
     </section>
 
+    <section class="panel work-type-panel">
+      <div class="panel-heading-row">
+        <h2>Work item pages</h2>
+        <span class="mini-status">Page shells</span>
+      </div>
+      <div class="work-tabs" role="tablist" aria-label="Work item type pages">
+        <button class="work-tab active" type="button" role="tab" aria-selected="true" data-work-tab="feature"><span class="type-icon feature">F</span>Feature</button>
+        <button class="work-tab" type="button" role="tab" aria-selected="false" data-work-tab="objective"><span class="type-icon objective">O</span>Objective</button>
+        <button class="work-tab" type="button" role="tab" aria-selected="false" data-work-tab="post-development-bug"><span class="type-icon pdb">P</span>Post Development Bug</button>
+        <button class="work-tab" type="button" role="tab" aria-selected="false" data-work-tab="task"><span class="type-icon task">T</span>Task</button>
+        <button class="work-tab" type="button" role="tab" aria-selected="false" data-work-tab="test-case"><span class="type-icon test-case">TC</span>Test Case</button>
+        <button class="work-tab" type="button" role="tab" aria-selected="false" data-work-tab="user-story"><span class="type-icon user-story">US</span>User Story</button>
+      </div>
+
+      <div class="work-page active" data-work-page="feature" role="tabpanel">
+        <div class="work-page-heading">
+          <div><h3>Feature</h3><p>Page shell for feature-level planning and AI-assisted breakdown.</p></div>
+          <span class="type-pill">Creatable</span>
+        </div>
+        <div class="page-block-grid">
+          <div class="page-block"><strong>Overview block</strong><span>Scope, goal, owner, target release.</span></div>
+          <div class="page-block"><strong>Analysis block</strong><span>Risks, dependencies, missing details.</span></div>
+          <div class="page-block"><strong>Split block</strong><span>Suggested stories, tasks, validation work.</span></div>
+        </div>
+      </div>
+
+      <div class="work-page" data-work-page="objective" role="tabpanel" hidden>
+        <div class="work-page-heading">
+          <div><h3>Objective</h3><p>Page shell for objective review, SMART checks, and measurable outcomes.</p></div>
+          <span class="type-pill muted-pill">Analyze first</span>
+        </div>
+        <div class="page-block-grid">
+          <div class="page-block"><strong>SMART block</strong><span>Specific, measurable, achievable, relevant, time-bound.</span></div>
+          <div class="page-block"><strong>Alignment block</strong><span>Linked features, business value, success metrics.</span></div>
+          <div class="page-block"><strong>Action block</strong><span>Suggested child features or follow-up tasks.</span></div>
+        </div>
+      </div>
+
+      <div class="work-page" data-work-page="post-development-bug" role="tabpanel" hidden>
+        <div class="work-page-heading">
+          <div><h3>Post Development Bug</h3><p>Page shell for bug triage after development work has started or completed.</p></div>
+          <span class="type-pill muted-pill">Analyze first</span>
+        </div>
+        <div class="page-block-grid">
+          <div class="page-block"><strong>Triage block</strong><span>Impact, severity, repro confidence, affected area.</span></div>
+          <div class="page-block"><strong>Root cause block</strong><span>Likely cause, changed behavior, suspected owner.</span></div>
+          <div class="page-block"><strong>Validation block</strong><span>Regression checks, evidence, close criteria.</span></div>
+        </div>
+      </div>
+
+      <div class="work-page" data-work-page="task" role="tabpanel" hidden>
+        <div class="work-page-heading">
+          <div><h3>Task</h3><p>Page shell for small executable work items with clear completion criteria.</p></div>
+          <span class="type-pill">Creatable</span>
+        </div>
+        <div class="page-block-grid">
+          <div class="page-block"><strong>Task detail block</strong><span>What to do, constraints, expected output.</span></div>
+          <div class="page-block"><strong>Definition of done block</strong><span>Evidence, checks, reviewer expectations.</span></div>
+          <div class="page-block"><strong>Parent link block</strong><span>Feature or story relationship.</span></div>
+        </div>
+      </div>
+
+      <div class="work-page" data-work-page="test-case" role="tabpanel" hidden>
+        <div class="work-page-heading">
+          <div><h3>Test Case</h3><p>Page shell for structured test design and validation coverage.</p></div>
+          <span class="type-pill muted-pill">Analyze first</span>
+        </div>
+        <div class="page-block-grid">
+          <div class="page-block"><strong>Preconditions block</strong><span>Setup, data, environment, version.</span></div>
+          <div class="page-block"><strong>Steps block</strong><span>Actions, expected results, pass criteria.</span></div>
+          <div class="page-block"><strong>Coverage block</strong><span>Linked bug/story/feature and risk area.</span></div>
+        </div>
+      </div>
+
+      <div class="work-page" data-work-page="user-story" role="tabpanel" hidden>
+        <div class="work-page-heading">
+          <div><h3>User Story</h3><p>Page shell for user value, acceptance criteria, and delivery tasks.</p></div>
+          <span class="type-pill">Creatable</span>
+        </div>
+        <div class="page-block-grid">
+          <div class="page-block"><strong>Story block</strong><span>As a user, I want, so that.</span></div>
+          <div class="page-block"><strong>Acceptance block</strong><span>Given/when/then or checklist criteria.</span></div>
+          <div class="page-block"><strong>Task split block</strong><span>Implementation, test, review tasks.</span></div>
+        </div>
+      </div>
+    </section>
+
     <section class="panel">
       <h2>Read work items</h2>
       <label for="readIds">Work item IDs</label>
