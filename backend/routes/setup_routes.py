@@ -5,6 +5,7 @@ from dotenv import set_key
 from flask import Blueprint, jsonify, request
 
 from config import AppConfig
+from services.ado_client import AdoClient
 
 setup_bp = Blueprint("setup", __name__, url_prefix="/api/setup")
 
@@ -36,6 +37,27 @@ def setup_status():
             "githubTokenConfigured": bool(config.github_token),
         }
     )
+
+
+@setup_bp.get("/ado-connection")
+def ado_connection():
+    try:
+        project = AdoClient(AppConfig.from_env()).test_connection()
+        return jsonify(
+            {
+                "connected": True,
+                "message": "ADO connected",
+                "project": project,
+            }
+        )
+    except Exception as error:
+        return jsonify(
+            {
+                "connected": False,
+                "message": "ADO not connected",
+                "error": str(error),
+            }
+        ), 400
 
 
 @setup_bp.post("")
