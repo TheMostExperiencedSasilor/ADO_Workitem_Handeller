@@ -11,6 +11,7 @@ A lightweight Python + HTML/CSS/JavaScript assistant for reading Azure DevOps wo
 - Generate new work independently or from analyzed source work items.
 - Apply writing rules such as SMART checks and splitting one large item into three smaller items.
 - Includes a floating AI chatbox in the frontend.
+- Includes a local setup section for entering ADO and AI settings.
 - Keeps all secrets in backend `.env` only. No PAT or GitHub token is exposed to frontend code.
 
 ## Project Structure
@@ -25,6 +26,7 @@ ADO_Workitem_Handeller/
 │   ├── routes/
 │   │   ├── __init__.py
 │   │   ├── chat_routes.py
+│   │   ├── setup_routes.py
 │   │   └── work_item_routes.py
 │   ├── rules/
 │   │   ├── __init__.py
@@ -59,13 +61,40 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-2. Create your backend environment file.
+2. Start the backend.
+
+```powershell
+python app.py
+```
+
+3. Open the app.
+
+```text
+http://localhost:5000
+```
+
+4. Use the Setup section in the page to enter:
+
+```text
+ADO organization
+ADO project
+ADO PAT
+AI base URL
+AI model
+GitHub / AI token
+```
+
+The setup section saves values into `backend/.env`. Password fields are cleared after saving and token values are never returned to the frontend.
+
+## Manual Setup Alternative
+
+You can still create `.env` yourself if preferred.
 
 ```powershell
 Copy-Item .env.example .env
 ```
 
-3. Fill in `.env` with your ADO and AI settings.
+Then fill in `.env` with your ADO and AI settings.
 
 ```env
 ADO_ORGANIZATION=your-org
@@ -75,18 +104,6 @@ AI_PROVIDER=github
 AI_BASE_URL=https://models.github.ai/inference
 AI_MODEL=openai/gpt-4.1-mini
 GITHUB_TOKEN=your-github-token
-```
-
-4. Start the backend.
-
-```powershell
-python app.py
-```
-
-5. Open the app.
-
-```text
-http://localhost:5000
 ```
 
 ## Security Rule
