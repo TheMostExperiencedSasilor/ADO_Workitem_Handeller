@@ -30,8 +30,15 @@
       <button id="analyzeButton">Analyze selected IDs</button>
     </section>
 
+    <section class="panel">
+      <h2>Draft</h2>
+      <label for="draftRequest">Draft request</label>
+      <textarea id="draftRequest" rows="4" placeholder="Write three tasks based on the selected Feature"></textarea>
+      <button id="draftButton">Draft with AI</button>
+    </section>
+
     <section class="panel write-panel">
-      <h2>Create work item</h2>
+      <h2>Create or edit work item</h2>
       <div class="field-row">
         <div>
           <label for="workItemType">Type</label>
@@ -43,7 +50,11 @@
         </div>
         <div>
           <label for="parentId">Parent ID</label>
-          <input id="parentId" type="text" placeholder="Optional">
+          <input id="parentId" type="text" placeholder="Optional for create">
+        </div>
+        <div>
+          <label for="updateId">Update ID</label>
+          <input id="updateId" type="text" placeholder="Required for edit">
         </div>
       </div>
       <label for="title">Title</label>
@@ -54,7 +65,10 @@
         <label><input id="ruleSmart" type="checkbox" checked> SMART table</label>
         <label><input id="ruleSplit" type="checkbox"> Split one into three</label>
       </div>
-      <button id="createButton">Create in ADO</button>
+      <div class="action-row">
+        <button id="createButton">Create in ADO</button>
+        <button id="updateButton" class="secondary-button">Update existing</button>
+      </div>
     </section>
 
     <section class="panel output-panel">
