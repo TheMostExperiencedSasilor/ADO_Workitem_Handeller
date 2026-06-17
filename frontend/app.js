@@ -1,5 +1,6 @@
 const output = document.querySelector('#output');
 const healthBadge = document.querySelector('#healthBadge');
+const adoConnectionBadge = document.querySelector('#adoConnectionBadge');
 const setupStatus = document.querySelector('#setupStatus');
 const readIds = document.querySelector('#readIds');
 
@@ -56,6 +57,12 @@ function setSetupStatus(text, state = '') {
   if (state) setupStatus.classList.add(state);
 }
 
+function setAdoConnection(text, state = '') {
+  adoConnectionBadge.textContent = text;
+  adoConnectionBadge.classList.remove('ok', 'error');
+  if (state) adoConnectionBadge.classList.add(state);
+}
+
 async function api(path, options = {}) {
   const response = await fetch(path, {
     headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
@@ -63,7 +70,7 @@ async function api(path, options = {}) {
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(data.error || `Request failed: ${response.status}`);
+    throw new Error(data.error || data.message || `Request failed: ${response.status}`);
   }
   return data;
 }
@@ -79,6 +86,17 @@ async function checkHealth() {
   }
 }
 
+async function checkAdoConnection() {
+  try {
+    const data = await api('/api/setup/ado-connection');
+    setAdoConnection(data.message || 'ADO connected', 'ok');
+    return data;
+  } catch (error) {
+    setAdoConnection('ADO not connected', 'error');
+    return null;
+  }
+}
+
 async function checkSetup() {
   try {
     const status = await api('/api/setup/status');
@@ -89,9 +107,15 @@ async function checkSetup() {
       && status.aiModelConfigured
       && status.githubTokenConfigured;
     setSetupStatus(ready ? 'Configured' : 'Missing values', ready ? 'ok' : 'error');
+    if (status.adoOrganizationConfigured && status.adoProjectConfigured && status.adoPatConfigured) {
+      await checkAdoConnection();
+    } else {
+      setAdoConnection('ADO not connected', 'error');
+    }
     show(status);
   } catch (error) {
     setSetupStatus('Setup check failed', 'error');
+    setAdoConnection('ADO not connected', 'error');
     show(error.message);
   }
 }
@@ -105,9 +129,11 @@ document.querySelector('#saveSetupButton').addEventListener('click', async () =>
     });
     clearSecretInputs();
     setSetupStatus('Saved', 'ok');
+    await checkAdoConnection();
     show(result);
   } catch (error) {
     setSetupStatus('Save failed', 'error');
+    setAdoConnection('ADO not connected', 'error');
     show(error.message);
   }
 });
