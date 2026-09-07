@@ -1,0 +1,141 @@
+.export-results-dialog {
+  width: min(900px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px);
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel);
+  color: var(--text);
+  box-shadow: var(--shadow);
+}
+
+.export-results-dialog::backdrop {
+  background: rgba(16, 24, 40, 0.46);
+}
+
+.export-results-shell {
+  padding: 22px;
+}
+
+.export-results-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.export-results-header h3 {
+  margin: 0 0 6px;
+}
+
+.export-results-header p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.export-close-button {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 2px 9px 5px;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 26px;
+  line-height: 1;
+}
+
+.export-close-button:hover {
+  background: var(--bg);
+  color: var(--text);
+}
+
+.export-fieldset {
+  margin: 18px 0 0;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.export-fieldset legend {
+  padding: 0 6px;
+  font-weight: 700;
+}
+
+.export-column-options,
+.export-format-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 20px;
+}
+
+.export-column-options label,
+.export-format-options label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--text);
+}
+
+.export-column-options input,
+.export-format-options input {
+  width: auto;
+}
+
+.export-hint {
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.export-preview-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin: 18px 0 8px;
+}
+
+.export-preview-heading span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.export-results-preview {
+  min-height: 220px;
+  max-height: 330px;
+  margin: 0;
+  overflow: auto;
+  white-space: pre;
+}
+
+.export-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.export-dialog-actions button {
+  margin-top: 0;
+}
+
+.export-dialog-actions button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+@media (max-width: 600px) {
+  .export-results-shell {
+    padding: 16px;
+  }
+
+  .export-dialog-actions {
+    flex-direction: column-reverse;
+  }
+
+  .export-dialog-actions button {
+    width: 100%;
+  }
+}
