@@ -278,3 +278,119 @@ chatForm.addEventListener('submit', async (event) => {
 
 checkHealth();
 checkSetup();
+
+// Test Plan / Suite is independent of the work-item tabs and their output.
+let testSuitePoints = [];
+const testSuiteStatus = document.querySelector('#testSuiteStatus');
+const testSuiteResults = document.querySelector('#testSuiteResults');
+const loadTestSuiteButton = document.querySelector('#loadTestSuiteButton');
+const copyTestSuiteButton = document.querySelector('#copyTestSuiteButton');
+const copyFailedTestsButton = document.querySelector('#copyFailedTestsButton');
+
+function setTestSuiteStatus(message, error = false) {
+  testSuiteStatus.textContent = message;
+  testSuiteStatus.classList.toggle('error', error);
+}
+
+function testPointsMarkdown(points, failedOnly = false) {
+  const escapeCell = (value) => String(value ?? '')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/\\/g, '\\\\').replace(/\|/g, '\\|').replace(/[\r\n]+/g, ' ');
+  const rows = failedOnly ? points.filter((point) => point.outcome === 'Failed') : points;
+  return [
+    '| Test Case ID | Title | Outcome | Order |',
+    '|---:|---|---|---:|',
+    ...rows.map((point) => `| ${[point.testCaseId, point.title, point.outcome, point.order].map(escapeCell).join(' | ')} |`),
+  ].join('\n');
+}
+
+function renderTestSuite(data) {
+  const summary = document.querySelector('#testSuiteSummary');
+  summary.replaceChildren();
+  for (const [label, value] of [
+    ['Test Plan', data.planId], ['Suite', data.suiteId], ['Total', data.summary.total],
+    ['Passed', data.summary.passed], ['Failed', data.summary.failed], ['Other / Not Run', data.summary.other],
+  ]) {
+    const item = document.createElement('span');
+    item.textContent = `${label}: ${value}`;
+    summary.appendChild(item);
+  }
+  const body = document.querySelector('#testSuiteRows');
+  const fragment = document.createDocumentFragment();
+  for (const point of data.testPoints) {
+    const row = document.createElement('tr');
+    for (const key of ['testCaseId', 'title', 'outcome', 'order']) {
+      const cell = document.createElement('td');
+      if (key === 'outcome') {
+        const badge = document.createElement('span');
+        const state = point.outcome === 'Passed' ? 'passed' : point.outcome === 'Failed' ? 'failed' : 'neutral';
+        badge.className = `test-outcome ${state}`;
+        badge.textContent = point.outcome;
+        cell.appendChild(badge);
+      } else {
+        cell.textContent = point[key] ?? '';
+      }
+      row.appendChild(cell);
+    }
+    fragment.appendChild(row);
+  }
+  body.replaceChildren(fragment);
+  testSuiteResults.hidden = false;
+}
+
+document.querySelector('#testSuiteForm').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  if (loadTestSuiteButton.disabled) return;
+  loadTestSuiteButton.disabled = true;
+  copyTestSuiteButton.disabled = true;
+  copyFailedTestsButton.disabled = true;
+  testSuiteResults.hidden = true;
+  testSuitePoints = [];
+  setTestSuiteStatus('Loading test suite…');
+  try {
+    const data = await api('/api/test-plans/read-suite', {
+      method: 'POST',
+      body: JSON.stringify({ url: document.querySelector('#testPlanUrl').value.trim() }),
+    });
+    if (!Array.isArray(data.testPoints) || !data.summary) throw new Error('Invalid response from the backend.');
+    testSuitePoints = data.testPoints;
+    renderTestSuite(data);
+    copyTestSuiteButton.disabled = testSuitePoints.length === 0;
+    copyFailedTestsButton.disabled = !testSuitePoints.some((point) => point.outcome === 'Failed');
+    setTestSuiteStatus(data.message || 'Test suite loaded.');
+  } catch (error) {
+    setTestSuiteStatus(error.message || 'Unable to load the test suite.', true);
+  } finally {
+    loadTestSuiteButton.disabled = false;
+  }
+});
+
+async function copyTestSuite(failedOnly) {
+  const markdown = testPointsMarkdown(testSuitePoints, failedOnly);
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(markdown);
+    } else {
+      // Support the existing app when opened over HTTP on a local network.
+      const field = document.createElement('textarea');
+      field.value = markdown;
+      field.style.position = 'fixed';
+      field.style.opacity = '0';
+      const previousFocus = document.activeElement;
+      document.body.appendChild(field);
+      try {
+        field.select();
+        if (!document.execCommand('copy')) throw new Error('Copy unavailable');
+      } finally {
+        field.remove();
+        previousFocus?.focus();
+      }
+    }
+    setTestSuiteStatus(failedOnly ? 'Failed cases copied as Markdown.' : 'Table copied as Markdown.');
+  } catch {
+    setTestSuiteStatus('Could not copy. Allow clipboard access or open the app on localhost/HTTPS and try again.', true);
+  }
+}
+
+copyTestSuiteButton.addEventListener('click', () => copyTestSuite(false));
+copyFailedTestsButton.addEventListener('click', () => copyTestSuite(true));

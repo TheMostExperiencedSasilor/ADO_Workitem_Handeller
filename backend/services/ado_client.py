@@ -1,6 +1,7 @@
 import base64
+import re
 from typing import Any
-from urllib.parse import quote
+from urllib.parse import quote, unquote
 
 import requests
 
@@ -21,15 +22,18 @@ class AdoClient:
             **self.headers,
             "Content-Type": "application/json-patch+json",
         }
+        # Accept a plain name or a project path copied from an ADO URL.
+        # Decode once, then encode as one path segment; never turn + into a space.
+        self.project_path = quote(unquote(self.config.ado_project), safe="")
         self.base_url = (
             f"https://dev.azure.com/{self.config.ado_organization}/"
-            f"{quote(self.config.ado_project)}"
+            f"{self.project_path}"
         )
 
     def test_connection(self) -> dict[str, Any]:
         url = (
             f"https://dev.azure.com/{self.config.ado_organization}/"
-            f"_apis/projects/{quote(self.config.ado_project, safe='')}"
+            f"_apis/projects/{self.project_path}"
         )
         response = requests.get(
             url,
@@ -64,42 +68,79 @@ class AdoClient:
         response.raise_for_status()
         return response.json().get("value", [])
 
-    def read_test_points(self, plan_id: int, suite_id: int) -> list[dict[str, Any]]:
-        """Return all test points in one ADO test-plan suite.
-
-        Azure DevOps paginates this API with the x-ms-continuationtoken
-        response header, so keep requesting until no continuation token remains.
-        """
-        url = (
-            f"{self.base_url}/_apis/testplan/Plans/{plan_id}/"
-            f"Suites/{suite_id}/TestPoint"
-        )
-        points: list[dict[str, Any]] = []
-        continuation_token: str | None = None
-
+    def _read_test_plan_pages(self, path: str) -> list[dict[str, Any]]:
+        """Follow ADO continuation headers without following payload URLs."""
+        params = {"api-version": self.config.ado_api_version, "isRecursive": "false"}
+        items = []
+        seen_tokens = set()
         while True:
-            params: dict[str, Any] = {
-                "api-version": "7.1",
-                "includePointDetails": "true",
-                "returnIdentityRef": "true",
-            }
-            if continuation_token:
-                params["continuationToken"] = continuation_token
-
             response = requests.get(
-                url,
-                headers=self.headers,
-                params=params,
-                timeout=30,
+                f"{self.base_url}/_apis/testplan/{path}",
+                headers=self.headers, params=dict(params), timeout=30,
+                allow_redirects=False,
             )
             response.raise_for_status()
-            points.extend(response.json().get("value", []))
+            if response.status_code != 200:
+                raise ValueError("Unexpected Azure DevOps response.")
+            data = response.json()
+            if not isinstance(data, dict) or not isinstance(data.get("value"), list):
+                raise ValueError("Invalid Azure DevOps response.")
+            items.extend(data["value"])
+            token = response.headers.get("x-ms-continuationtoken")
+            if not token:
+                return items
+            if token in seen_tokens:
+                raise ValueError("Repeated Azure DevOps continuation token.")
+            seen_tokens.add(token)
+            params["continuationToken"] = token
 
-            continuation_token = response.headers.get("x-ms-continuationtoken")
-            if not continuation_token:
-                break
+    def read_test_points(self, plan_id: int, suite_id: int) -> list[dict[str, Any]]:
+        """Return one row per point (including multiple configurations per case)."""
+        path = f"Plans/{plan_id}/Suites/{suite_id}"
+        points = self._read_test_plan_pages(f"{path}/TestPoint")
+        if not points:
+            return []
 
-        return points
+        # Order belongs to suite membership, not the point ID or work item ID.
+        cases = self._read_test_plan_pages(f"{path}/TestCase")
+        orders = {}
+        for case in cases:
+            case_id = int(case["workItem"]["id"])
+            order = case.get("order")
+            if isinstance(order, int) and not isinstance(order, bool):
+                orders[case_id] = order
+
+        rows = []
+        for point in points:
+            reference = point["testCaseReference"]
+            case_id = int(reference["id"])
+            raw_outcome = (point.get("results") or {}).get("outcome") or "unspecified"
+            outcome = re.sub(r"(?<=[a-z])(?=[A-Z])", " ", raw_outcome).replace("_", " ").title()
+            if outcome in {"None", "Not Executed", "Not Run"}:
+                outcome = "Not Run"
+            rows.append({
+                "testCaseId": case_id,
+                "title": reference.get("name") or "",
+                "outcome": outcome,
+                "order": orders.get(case_id),
+            })
+
+        missing_ids = list(dict.fromkeys(row["testCaseId"] for row in rows if not row["title"]))
+        titles = {}
+        # The work-item list API accepts at most 200 IDs per request.
+        for start in range(0, len(missing_ids), 200):
+            for item in self.read_work_items(missing_ids[start:start + 200]):
+                titles[int(item["id"])] = item.get("fields", {}).get("System.Title", "")
+        for row in rows:
+            if not row["title"]:
+                row["title"] = titles.get(row["testCaseId"]) or "Title unavailable"
+
+        # Sort known orders in place; rows without Order retain their API positions.
+        ordered = iter(sorted(
+            (row for row in rows if row["order"] is not None),
+            key=lambda row: row["order"],
+        ))
+        return [next(ordered) if row["order"] is not None else row for row in rows]
 
     def create_work_item(
         self,

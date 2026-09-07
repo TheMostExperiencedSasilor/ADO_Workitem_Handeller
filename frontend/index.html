@@ -58,6 +58,31 @@
       </div>
     </section>
 
+    <section class="panel test-plan-panel" aria-labelledby="testPlanHeading">
+      <h2 id="testPlanHeading">Test Result Summary</h2>
+      <form id="testSuiteForm">
+        <label for="testPlanUrl">Azure DevOps Test Plan URL</label>
+        <input id="testPlanUrl" type="text" placeholder="https://dev.azure.com/.../_testPlans/execute?planId=83602&amp;suiteId=106867" required>
+        <button id="loadTestSuiteButton" type="submit">Load Test Suite</button>
+      </form>
+      <p id="testSuiteStatus" class="mini-status" role="status" aria-live="polite">Paste a suite URL to load current results using your ADO setup.</p>
+      <div id="testSuiteResults" hidden>
+        <div id="testSuiteSummary" class="test-suite-summary"></div>
+        <div class="action-row">
+          <button id="copyTestSuiteButton" type="button" class="secondary-button" disabled>Copy Table</button>
+          <button id="copyFailedTestsButton" type="button" class="secondary-button" disabled>Copy Failed Only</button>
+        </div>
+        <p class="mini-status">One row per test point; a test case may appear for multiple configurations. Blank Order means ADO did not provide it.</p>
+        <div class="test-suite-table-wrap" tabindex="0" role="region" aria-label="Test suite results">
+          <table class="test-suite-table">
+            <caption>Current test-point results</caption>
+            <thead><tr><th scope="col">Test Case ID</th><th scope="col">Title</th><th scope="col">Outcome</th><th scope="col">Order</th></tr></thead>
+            <tbody id="testSuiteRows"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
     <section class="panel work-type-panel">
       <div class="panel-heading-row">
         <h2>Work item pages</h2>
