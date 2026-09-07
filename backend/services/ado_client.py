@@ -64,6 +64,43 @@ class AdoClient:
         response.raise_for_status()
         return response.json().get("value", [])
 
+    def read_test_points(self, plan_id: int, suite_id: int) -> list[dict[str, Any]]:
+        """Return all test points in one ADO test-plan suite.
+
+        Azure DevOps paginates this API with the x-ms-continuationtoken
+        response header, so keep requesting until no continuation token remains.
+        """
+        url = (
+            f"{self.base_url}/_apis/testplan/Plans/{plan_id}/"
+            f"Suites/{suite_id}/TestPoint"
+        )
+        points: list[dict[str, Any]] = []
+        continuation_token: str | None = None
+
+        while True:
+            params: dict[str, Any] = {
+                "api-version": "7.1",
+                "includePointDetails": "true",
+                "returnIdentityRef": "true",
+            }
+            if continuation_token:
+                params["continuationToken"] = continuation_token
+
+            response = requests.get(
+                url,
+                headers=self.headers,
+                params=params,
+                timeout=30,
+            )
+            response.raise_for_status()
+            points.extend(response.json().get("value", []))
+
+            continuation_token = response.headers.get("x-ms-continuationtoken")
+            if not continuation_token:
+                break
+
+        return points
+
     def create_work_item(
         self,
         work_item_type: str,
