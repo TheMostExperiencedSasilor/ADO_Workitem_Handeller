@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>ADO Work Item AI Assistant</title>
   <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="export-results.css">
 </head>
 <body>
   <header class="app-header">
@@ -81,7 +82,7 @@
           <button id="copyTestSuiteButton" type="button" class="secondary-button" disabled>Copy Table</button>
           <button id="copyFailedTestsButton" type="button" class="secondary-button" disabled>Copy Failed Only</button>
         </div>
-        <p class="mini-status">One row per test point; a test case may appear for multiple configurations. Blank Order means ADO did not provide it. Tester is the assigned test-point tester. Drag header edges to resize columns or row bottom edges to resize rows. Copy uses filtered rows.</p>
+        <p class="mini-status">One row per test point; a test case may appear for multiple configurations. Blank Order means ADO did not provide it. Tester is the assigned test-point tester. Drag header edges to resize columns or row bottom edges to resize rows. Export uses filtered rows.</p>
         <div class="test-suite-table-wrap" tabindex="0" role="region" aria-label="Test suite results">
           <table class="test-suite-table" id="testSuiteTable">
             <caption>Current test-point results</caption>
@@ -255,5 +256,6 @@
   </aside>
 
   <script src="app.js"></script>
+  <script src="export-results.js"></script>
 </body>
 </html>
