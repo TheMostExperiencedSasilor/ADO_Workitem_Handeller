@@ -176,3 +176,28 @@ def test_summary_section_is_served_and_endpoint_registered():
         assert f'id="{element_id}"' in html
     assert any(rule.rule == "/api/test-plans/read-suite" and "POST" in rule.methods
                for rule in app.url_map.iter_rules())
+
+
+@pytest.mark.parametrize('project, encoded', [
+    ('AspenTech SAFe', 'AspenTech%20SAFe'),
+    ('AspenTech%20SAFe', 'AspenTech%20SAFe'),
+    ('Project + QA', 'Project%20%2B%20QA'),
+    ('Project%20%2B%20QA', 'Project%20%2B%20QA'),
+    ('Project  QA', 'Project%20%20QA'),
+    ('测试 项目', '%E6%B5%8B%E8%AF%95%20%E9%A1%B9%E7%9B%AE'),
+    ('100% Ready', '100%25%20Ready'),
+])
+def test_project_path_encoded_once_for_all_readers(config, monkeypatch, project, encoded):
+    from dataclasses import replace
+    client = AdoClient(replace(config, ado_project=project))
+    get = Mock(return_value=page([]))
+    monkeypatch.setattr('services.ado_client.requests.get', get)
+    client.test_connection()
+    client.read_work_items([123])
+    client.read_test_points(83602, 106867)
+    urls = [call.args[0] for call in get.call_args_list]
+    assert urls == [
+        f'https://dev.azure.com/configured-org/_apis/projects/{encoded}',
+        f'https://dev.azure.com/configured-org/{encoded}/_apis/wit/workitems',
+        f'https://dev.azure.com/configured-org/{encoded}/_apis/testplan/Plans/83602/Suites/106867/TestPoint',
+    ]

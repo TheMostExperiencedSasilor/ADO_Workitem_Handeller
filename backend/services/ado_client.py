@@ -1,7 +1,7 @@
 import base64
 import re
 from typing import Any
-from urllib.parse import quote
+from urllib.parse import quote, unquote
 
 import requests
 
@@ -22,15 +22,18 @@ class AdoClient:
             **self.headers,
             "Content-Type": "application/json-patch+json",
         }
+        # Accept a plain name or a project path copied from an ADO URL.
+        # Decode once, then encode as one path segment; never turn + into a space.
+        self.project_path = quote(unquote(self.config.ado_project), safe="")
         self.base_url = (
             f"https://dev.azure.com/{self.config.ado_organization}/"
-            f"{quote(self.config.ado_project)}"
+            f"{self.project_path}"
         )
 
     def test_connection(self) -> dict[str, Any]:
         url = (
             f"https://dev.azure.com/{self.config.ado_organization}/"
-            f"_apis/projects/{quote(self.config.ado_project, safe='')}"
+            f"_apis/projects/{self.project_path}"
         )
         response = requests.get(
             url,
