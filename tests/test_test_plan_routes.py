@@ -161,3 +161,18 @@ def test_existing_work_item_reader(config, monkeypatch):
     assert response.json['workItems'][0]['id'] == 123
     assert get.call_args.args[0].endswith('/_apis/wit/workitems')
     assert get.call_args.kwargs['params']['ids'] == '123'
+
+
+def test_summary_section_is_served_and_endpoint_registered():
+    app = create_app()
+    client = app.test_client()
+    response = client.get("/")
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    assert '<h2 id="testPlanHeading">Test Result Summary</h2>' in html
+    assert html.index('id="saveSetupButton"') < html.index('id="testPlanHeading"') < html.index('class="panel work-type-panel"')
+    for element_id in ("testPlanUrl", "loadTestSuiteButton", "testSuiteSummary", "testSuiteRows",
+                       "copyTestSuiteButton", "copyFailedTestsButton"):
+        assert f'id="{element_id}"' in html
+    assert any(rule.rule == "/api/test-plans/read-suite" and "POST" in rule.methods
+               for rule in app.url_map.iter_rules())
