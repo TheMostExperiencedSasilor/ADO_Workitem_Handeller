@@ -488,3 +488,15 @@ pre {
 .test-outcome::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
 .test-outcome.passed { color: #0f6b3f; }
 .test-outcome.failed { color: var(--danger); }
+
+.test-suite-filters { display: grid; grid-template-columns: 1fr 2fr 1fr 1fr; gap: 12px; }
+.test-suite-table { table-layout: fixed; }
+.test-suite-table th, .test-suite-table td { position: relative; overflow-wrap: anywhere; }
+.test-suite-table td:nth-child(2) { min-width: 0; }
+.test-suite-table .test-outcome { white-space: normal; }
+.test-resize-handle { position: absolute; z-index: 1; touch-action: none; user-select: none; }
+.test-resize-handle.column { right: 0; top: 0; bottom: 0; width: 7px; cursor: col-resize; border-right: 2px solid var(--border); }
+.test-resize-handle.row { left: 0; right: 0; bottom: 0; height: 7px; cursor: row-resize; }
+.test-resize-handle:hover, .test-resize-handle:focus-visible { background: var(--accent); outline: 2px solid var(--accent); }
+@media (max-width: 900px) { .test-suite-filters { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 500px) { .test-suite-filters { grid-template-columns: 1fr; } }
