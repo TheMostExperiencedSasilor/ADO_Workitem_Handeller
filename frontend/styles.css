@@ -472,3 +472,19 @@ pre {
     flex-direction: column;
   }
 }
+
+.test-plan-panel { grid-column: 1 / -1; }
+.test-suite-summary { display: flex; flex-wrap: wrap; gap: 12px 24px; font-weight: 600; }
+.test-plan-panel button:disabled { opacity: 0.5; cursor: not-allowed; }
+.test-suite-table-wrap { overflow-x: auto; margin-top: 16px; }
+.test-suite-table { width: 100%; border-collapse: collapse; text-align: left; }
+.test-suite-table caption { text-align: left; color: var(--muted); margin-bottom: 8px; }
+.test-suite-table th, .test-suite-table td { padding: 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+.test-suite-table th { background: var(--bg); white-space: nowrap; }
+.test-suite-table td:nth-child(2) { overflow-wrap: anywhere; min-width: 220px; }
+.test-suite-table th:first-child, .test-suite-table td:first-child,
+.test-suite-table th:last-child, .test-suite-table td:last-child { text-align: right; }
+.test-outcome { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; color: var(--muted); }
+.test-outcome::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+.test-outcome.passed { color: #0f6b3f; }
+.test-outcome.failed { color: var(--danger); }
