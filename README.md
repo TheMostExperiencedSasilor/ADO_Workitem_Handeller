@@ -52,6 +52,22 @@ ADO_Workitem_Handeller/
 └── README.md
 ```
 
+## One-click start (Windows)
+
+Install Python 3.10 or newer once (enable **Add python.exe to PATH**), then
+double-click **Start-App.bat** in the repository folder.
+
+The launcher creates `backend/.venv`, installs dependencies on the first run
+(and when `requirements.txt` changes), starts the app and opens your browser.
+An internet connection is needed for dependency installation. Later launches
+reuse the environment. No PowerShell activation or execution-policy changes are needed.
+
+Enter your organization, project and PAT in the existing **Setup** section.
+Saved settings are preserved. Keep the launcher window open; press **Ctrl+C**
+to stop. If startup fails, the window stays open so you can read the error.
+The launcher uses the configured host/port (default `http://127.0.0.1:5000`)
+and runs without the debug reloader. The manual startup below remains available.
+
 ## Quick Start
 
 1. Create and activate a Python virtual environment.
