@@ -7,6 +7,7 @@ const vm = require('node:vm');
 function loadApp() {
   const nodes = new Map();
   const element = () => ({
+    style: {}, setAttribute() {}, getBoundingClientRect() { return {height: 50}; },
     value: '', textContent: '', children: [], listeners: {}, disabled: false,
     classList: { add() {}, remove() {}, toggle() {} },
     addEventListener(type, fn) { this.listeners[type] = fn; },
@@ -29,7 +30,7 @@ test('Markdown escapes pipes, backslashes, newlines and HTML; missing Order stay
   const { context } = loadApp();
   context.points = [{ testCaseId: 1, title: 'A\\|B\n<script>', outcome: 'Failed', order: null }];
   const markdown = vm.runInContext('testPointsMarkdown(points)', context);
-  assert.equal(markdown, '| Test Case ID | Title | Outcome | Order |\n|---:|---|---|---:|\n| 1 | A\\\\\\|B &lt;script&gt; | Failed |  |');
+  assert.equal(markdown, '| Test Case ID | Title | Outcome | Tester | Order |\n|---:|---|---|---|---:|\n| 1 | A\\\\\\|B &lt;script&gt; | Failed |  |  |');
 });
 
 test('load, safe rendering, both clipboard buttons, empty suite and failed reload', async () => {
@@ -66,4 +67,58 @@ test('load, safe rendering, both clipboard buttons, empty suite and failed reloa
   assert.equal(nodes.get('#testSuiteResults').hidden, true);
   assert.equal(nodes.get('#testSuiteStatus').textContent, 'API timeout');
   assert.equal(nodes.get('#loadTestSuiteButton').disabled, false);
+});
+
+
+test('combined filters are case-insensitive and keep API order', () => {
+  const { context } = loadApp();
+  context.points = [
+    {testCaseId: 12, title: 'Compressor A', outcome: 'Failed', tester: 'Jane'},
+    {testCaseId: 123, title: 'Compressor B', outcome: 'Passed', tester: 'Jane'},
+    {testCaseId: 124, title: 'Compressor C', outcome: 'Failed', tester: 'Alex'},
+  ];
+  const rows = vm.runInContext("filterTestPoints(points, {id: '12', title: ' COMPRESSOR ', result: 'Failed', tester: 'jAnE'})", context);
+  assert.deepEqual(Array.from(rows, row => row.testCaseId), [12]);
+  assert.equal(vm.runInContext("filterTestPoints(points, {id: '', title: '', result: '', tester: 'Nobody'}).length", context), 0);
+});
+
+test('resize handles support pointer dragging, minimum size and keyboard', () => {
+  const { context } = loadApp();
+  for (const axis of ['column', 'row']) {
+    let size = 100;
+    const handle = context.makeResizeHandle(axis, 'Resize', () => size, next => { size = next; }, 40);
+    handle.setPointerCapture = () => {};
+    handle.removeEventListener = type => { delete handle.listeners[type]; };
+    handle.listeners.pointerdown({ button: 0, pointerId: 1, clientX: 10, clientY: 10, preventDefault() {} });
+    handle.listeners.pointermove({clientX: 60, clientY: 60});
+    assert.equal(size, 150);
+    handle.listeners.pointermove({clientX: -300, clientY: -300});
+    assert.equal(size, 40);
+    handle.listeners.pointerup();
+    assert.equal(handle.listeners.pointermove, undefined);
+    handle.listeners.keydown({key: axis === 'column' ? 'ArrowRight' : 'ArrowDown', preventDefault() {}});
+    assert.equal(size, 50);
+  }
+});
+
+
+test('copy buttons respect filters and escape Tester in Markdown', async () => {
+  const { context, nodes } = loadApp();
+  context.fixture = {planId: 1, suiteId: 2, summary: {total: 2, passed: 0, failed: 2, other: 0}, testPoints: [
+    {testCaseId: 10, title: 'Visible', outcome: 'Failed', tester: 'Jane | QA', order: 1},
+    {testCaseId: 20, title: 'Hidden', outcome: 'Failed', tester: 'Alex', order: 2},
+  ]};
+  vm.runInContext('testSuitePoints = fixture.testPoints; renderTestSuite(fixture)', context);
+  nodes.get('#testFilterTester').value = 'jane';
+  nodes.get('#testFilterTester').listeners.input();
+  await nodes.get('#copyFailedTestsButton').listeners.click();
+  assert.match(context.copied, /Visible/);
+  assert.doesNotMatch(context.copied, /Hidden/);
+  assert.ok(context.copied.includes('Jane \\| QA'));
+  nodes.get('#testFilterTester').value = 'Nobody';
+  nodes.get('#testFilterTester').listeners.input();
+  assert.equal(nodes.get('#copyTestSuiteButton').disabled, true);
+  assert.equal(nodes.get('#copyFailedTestsButton').disabled, true);
+  nodes.get('#clearTestFilters').listeners.click();
+  assert.equal(nodes.get('#copyTestSuiteButton').disabled, false);
 });

@@ -281,6 +281,9 @@ checkSetup();
 
 // Test Plan / Suite is independent of the work-item tabs and their output.
 let testSuitePoints = [];
+let visibleTestPoints = [];
+const testRowHeights = new Map();
+const testColumnWidths = [150, 600, 150, 220, 100];
 const testSuiteStatus = document.querySelector('#testSuiteStatus');
 const testSuiteResults = document.querySelector('#testSuiteResults');
 const loadTestSuiteButton = document.querySelector('#loadTestSuiteButton');
@@ -298,9 +301,9 @@ function testPointsMarkdown(points, failedOnly = false) {
     .replace(/\\/g, '\\\\').replace(/\|/g, '\\|').replace(/[\r\n]+/g, ' ');
   const rows = failedOnly ? points.filter((point) => point.outcome === 'Failed') : points;
   return [
-    '| Test Case ID | Title | Outcome | Order |',
-    '|---:|---|---|---:|',
-    ...rows.map((point) => `| ${[point.testCaseId, point.title, point.outcome, point.order].map(escapeCell).join(' | ')} |`),
+    '| Test Case ID | Title | Outcome | Tester | Order |',
+    '|---:|---|---|---|---:|',
+    ...rows.map((point) => `| ${[point.testCaseId, point.title, point.outcome, point.tester, point.order].map(escapeCell).join(' | ')} |`),
   ].join('\n');
 }
 
@@ -315,11 +318,42 @@ function renderTestSuite(data) {
     item.textContent = `${label}: ${value}`;
     summary.appendChild(item);
   }
+  const resultFilter = document.querySelector('#testFilterResult');
+  resultFilter.replaceChildren();
+  for (const result of ['', ...new Set(data.testPoints.map((point) => point.outcome))]) {
+    const option = document.createElement('option');
+    option.value = result;
+    option.textContent = result || 'All results';
+    resultFilter.appendChild(option);
+  }
+  clearTestFilters();
+  testSuiteResults.hidden = false;
+}
+
+function filterTestPoints(points, filters) {
+  const includes = (value, query) => String(value ?? '').toLowerCase().includes(query.trim().toLowerCase());
+  return points.filter((point) => includes(point.testCaseId, filters.id)
+    && includes(point.title, filters.title) && includes(point.tester || 'Unassigned', filters.tester)
+    && (!filters.result || point.outcome === filters.result));
+}
+
+function renderFilteredTests() {
+  visibleTestPoints = filterTestPoints(testSuitePoints, {
+    id: document.querySelector('#testFilterId').value,
+    title: document.querySelector('#testFilterTitle').value,
+    result: document.querySelector('#testFilterResult').value,
+    tester: document.querySelector('#testFilterTester').value,
+  });
+  document.querySelector('#testSuiteFilterStatus').textContent = visibleTestPoints.length
+    ? `Showing ${visibleTestPoints.length} of ${testSuitePoints.length} test points.`
+    : 'No test points match the filters.';
+  copyTestSuiteButton.disabled = visibleTestPoints.length === 0;
+  copyFailedTestsButton.disabled = !visibleTestPoints.some((point) => point.outcome === 'Failed');
   const body = document.querySelector('#testSuiteRows');
   const fragment = document.createDocumentFragment();
-  for (const point of data.testPoints) {
+  for (const point of visibleTestPoints) {
     const row = document.createElement('tr');
-    for (const key of ['testCaseId', 'title', 'outcome', 'order']) {
+    for (const key of ['testCaseId', 'title', 'outcome', 'tester', 'order']) {
       const cell = document.createElement('td');
       if (key === 'outcome') {
         const badge = document.createElement('span');
@@ -328,10 +362,15 @@ function renderTestSuite(data) {
         badge.textContent = point.outcome;
         cell.appendChild(badge);
       } else {
-        cell.textContent = point[key] ?? '';
+        cell.textContent = key === 'tester' ? point.tester || 'Unassigned' : point[key] ?? '';
       }
       row.appendChild(cell);
     }
+    if (testRowHeights.has(point)) row.style.height = `${testRowHeights.get(point)}px`;
+    const handle = makeResizeHandle('row', 'Resize row height',
+      () => row.getBoundingClientRect().height,
+      (size) => { row.style.height = `${size}px`; testRowHeights.set(point, size); }, 40);
+    row.children[0].appendChild(handle);
     fragment.appendChild(row);
   }
   body.replaceChildren(fragment);
@@ -346,6 +385,8 @@ document.querySelector('#testSuiteForm').addEventListener('submit', async (event
   copyFailedTestsButton.disabled = true;
   testSuiteResults.hidden = true;
   testSuitePoints = [];
+  visibleTestPoints = [];
+  testRowHeights.clear();
   setTestSuiteStatus('Loading test suite…');
   try {
     const data = await api('/api/test-plans/read-suite', {
@@ -366,7 +407,7 @@ document.querySelector('#testSuiteForm').addEventListener('submit', async (event
 });
 
 async function copyTestSuite(failedOnly) {
-  const markdown = testPointsMarkdown(testSuitePoints, failedOnly);
+  const markdown = testPointsMarkdown(visibleTestPoints, failedOnly);
   try {
     if (navigator.clipboard?.writeText) {
       await navigator.clipboard.writeText(markdown);
@@ -394,3 +435,69 @@ async function copyTestSuite(failedOnly) {
 
 copyTestSuiteButton.addEventListener('click', () => copyTestSuite(false));
 copyFailedTestsButton.addEventListener('click', () => copyTestSuite(true));
+
+
+function clearTestFilters() {
+  for (const id of ['testFilterId', 'testFilterTitle', 'testFilterResult', 'testFilterTester']) {
+    document.querySelector(`#${id}`).value = '';
+  }
+  renderFilteredTests();
+}
+for (const id of ['testFilterId', 'testFilterTitle', 'testFilterResult', 'testFilterTester']) {
+  document.querySelector(`#${id}`).addEventListener(id === 'testFilterResult' ? 'change' : 'input', renderFilteredTests);
+}
+document.querySelector('#clearTestFilters').addEventListener('click', clearTestFilters);
+
+function makeResizeHandle(axis, label, getSize, setSize, minimum) {
+  const handle = document.createElement('span');
+  handle.className = `test-resize-handle ${axis}`;
+  handle.tabIndex = 0;
+  handle.setAttribute('role', 'separator');
+  handle.setAttribute('aria-label', label);
+  handle.setAttribute('aria-orientation', axis === 'column' ? 'vertical' : 'horizontal');
+  handle.addEventListener('pointerdown', (event) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    const start = axis === 'column' ? event.clientX : event.clientY;
+    const initial = getSize();
+    handle.setPointerCapture(event.pointerId);
+    const move = (next) => setSize(Math.max(minimum, initial + (axis === 'column' ? next.clientX : next.clientY) - start));
+    const stop = () => {
+      handle.removeEventListener('pointermove', move);
+      handle.removeEventListener('pointerup', stop);
+      handle.removeEventListener('pointercancel', stop);
+      handle.removeEventListener('lostpointercapture', stop);
+    };
+    handle.addEventListener('pointermove', move);
+    handle.addEventListener('pointerup', stop);
+    handle.addEventListener('pointercancel', stop);
+    handle.addEventListener('lostpointercapture', stop);
+  });
+  handle.addEventListener('keydown', (event) => {
+    const decrease = axis === 'column' ? 'ArrowLeft' : 'ArrowUp';
+    const increase = axis === 'column' ? 'ArrowRight' : 'ArrowDown';
+    if (![decrease, increase].includes(event.key)) return;
+    event.preventDefault();
+    setSize(Math.max(minimum, getSize() + (event.key === increase ? 10 : -10)));
+  });
+  return handle;
+}
+
+function applyTestColumnWidths() {
+  document.querySelectorAll('#testSuiteColumns col').forEach((col, index) => {
+    col.style.width = `${testColumnWidths[index]}px`;
+  });
+  document.querySelector('#testSuiteTable').style.width = `${testColumnWidths.reduce((sum, width) => sum + width, 0)}px`;
+}
+document.querySelectorAll('#testSuiteTable th').forEach((header, index) => {
+  header.appendChild(makeResizeHandle('column', `Resize ${header.textContent} column`,
+    () => testColumnWidths[index],
+    (size) => { testColumnWidths[index] = size; applyTestColumnWidths(); }, 80));
+});
+document.querySelector('#resetTestSizes').addEventListener('click', () => {
+  testColumnWidths.splice(0, 5, 150, 600, 150, 220, 100);
+  testRowHeights.clear();
+  applyTestColumnWidths();
+  renderFilteredTests();
+});
+applyTestColumnWidths();

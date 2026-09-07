@@ -68,15 +68,25 @@
       <p id="testSuiteStatus" class="mini-status" role="status" aria-live="polite">Paste a suite URL to load current results using your ADO setup.</p>
       <div id="testSuiteResults" hidden>
         <div id="testSuiteSummary" class="test-suite-summary"></div>
+        <div class="test-suite-filters">
+          <div><label for="testFilterId">ID</label><input id="testFilterId" type="search" placeholder="Filter ID"></div>
+          <div><label for="testFilterTitle">Title</label><input id="testFilterTitle" type="search" placeholder="Filter title"></div>
+          <div><label for="testFilterResult">Results</label><select id="testFilterResult"><option value="">All results</option></select></div>
+          <div><label for="testFilterTester">Tester</label><input id="testFilterTester" type="search" placeholder="Filter tester"></div>
+        </div>
+        <p id="testSuiteFilterStatus" class="mini-status" role="status"></p>
         <div class="action-row">
+          <button id="clearTestFilters" type="button" class="secondary-button">Clear Filters</button>
+          <button id="resetTestSizes" type="button" class="secondary-button">Reset Table Size</button>
           <button id="copyTestSuiteButton" type="button" class="secondary-button" disabled>Copy Table</button>
           <button id="copyFailedTestsButton" type="button" class="secondary-button" disabled>Copy Failed Only</button>
         </div>
-        <p class="mini-status">One row per test point; a test case may appear for multiple configurations. Blank Order means ADO did not provide it.</p>
+        <p class="mini-status">One row per test point; a test case may appear for multiple configurations. Blank Order means ADO did not provide it. Tester is the assigned test-point tester. Drag header edges to resize columns or row bottom edges to resize rows. Copy uses filtered rows.</p>
         <div class="test-suite-table-wrap" tabindex="0" role="region" aria-label="Test suite results">
-          <table class="test-suite-table">
+          <table class="test-suite-table" id="testSuiteTable">
             <caption>Current test-point results</caption>
-            <thead><tr><th scope="col">Test Case ID</th><th scope="col">Title</th><th scope="col">Outcome</th><th scope="col">Order</th></tr></thead>
+            <colgroup id="testSuiteColumns"><col><col><col><col><col></colgroup>
+            <thead><tr><th scope="col">Test Case ID</th><th scope="col">Title</th><th scope="col">Outcome</th><th scope="col">Tester</th><th scope="col">Order</th></tr></thead>
             <tbody id="testSuiteRows"></tbody>
           </table>
         </div>

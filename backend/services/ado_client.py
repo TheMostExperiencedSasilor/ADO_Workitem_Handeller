@@ -118,10 +118,13 @@ class AdoClient:
             outcome = re.sub(r"(?<=[a-z])(?=[A-Z])", " ", raw_outcome).replace("_", " ").title()
             if outcome in {"None", "Not Executed", "Not Run"}:
                 outcome = "Not Run"
+            tester = point.get("tester") or {}
+            tester_name = (tester.get("displayName") or tester.get("uniqueName") or "") if isinstance(tester, dict) else str(tester)
             rows.append({
                 "testCaseId": case_id,
                 "title": reference.get("name") or "",
                 "outcome": outcome,
+                "tester": tester_name,
                 "order": orders.get(case_id),
             })
 

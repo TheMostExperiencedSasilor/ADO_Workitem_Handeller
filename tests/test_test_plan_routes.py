@@ -122,7 +122,7 @@ def test_pagination_order_titles_and_config(config, monkeypatch):
     assert 'continuationToken' not in calls[0].kwargs['params']
     assert 'configured-org/configured%20project/' in calls[0].args[0]
     assert all(call.kwargs['headers'] == client.headers for call in calls)
-    assert set(rows[0]) == {'testCaseId', 'title', 'outcome', 'order'}
+    assert set(rows[0]) == {'testCaseId', 'title', 'outcome', 'tester', 'order'}
 
 
 def test_missing_orders_preserve_api_order(config, monkeypatch):
@@ -201,3 +201,17 @@ def test_project_path_encoded_once_for_all_readers(config, monkeypatch, project,
         f'https://dev.azure.com/configured-org/{encoded}/_apis/wit/workitems',
         f'https://dev.azure.com/configured-org/{encoded}/_apis/testplan/Plans/83602/Suites/106867/TestPoint',
     ]
+
+
+@pytest.mark.parametrize('identity, expected', [
+    ({'displayName': 'Jane | QA', 'uniqueName': 'jane@example.test'}, 'Jane | QA'),
+    ({'uniqueName': 'jane@example.test'}, 'jane@example.test'),
+    ({}, ''), (None, ''), ('Jane', 'Jane'),
+])
+def test_tester_is_assigned_point_identity(config, monkeypatch, identity, expected):
+    client = AdoClient(config)
+    raw = point(1, 'Case')
+    raw['tester'] = identity
+    raw['results']['lastResultDetails'] = {'runBy': {'displayName': 'Someone else'}}
+    monkeypatch.setattr(client, '_read_test_plan_pages', Mock(side_effect=[[raw], []]))
+    assert client.read_test_points(1, 2)[0]['tester'] == expected
