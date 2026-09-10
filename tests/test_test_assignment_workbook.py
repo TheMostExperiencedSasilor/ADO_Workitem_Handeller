@@ -7,7 +7,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
 from config import AppConfig
 from services.ado_client import AdoClient
 from services.test_assignment_workbook import (
-    RESULT_COLUMN_KEYS,
     WORKBOOK_HEADERS,
     TestAssignmentWorkbookService,
 )
@@ -83,7 +82,6 @@ def test_define_metadata_and_assigned_tester_join(monkeypatch):
         "automationScriptName": "VSTS10.cs",
         "order": 2,
         "tester": "Jane QA",
-        "outcome": "Passed / Failed",
     }]
 
 
@@ -106,16 +104,15 @@ def test_ambiguous_partial_tester_is_rejected(monkeypatch):
         assert "multiple people" in str(error)
 
 
-def test_excel_has_one_main_sheet_and_exact_columns(monkeypatch):
+def test_excel_has_one_main_sheet_exact_columns_and_empty_tracking_fields():
     rows = [{
         "testCaseId": 10,
         "title": "Case Ten",
         "productArea": "Area",
         "automationScriptName": "VSTS10.cs",
-        "outcome": "Passed",
     }]
 
-    stream = TestAssignmentWorkbookService.make_workbook(rows, "round2")
+    stream = TestAssignmentWorkbookService.make_workbook(rows)
 
     from openpyxl import load_workbook
     workbook = load_workbook(stream)
@@ -124,7 +121,8 @@ def test_excel_has_one_main_sheet_and_exact_columns(monkeypatch):
     assert [cell.value for cell in sheet[1]] == WORKBOOK_HEADERS
     assert sheet["A2"].value == 10
     assert sheet["B2"].value == "Case Ten"
-    assert sheet["F2"].value == "Passed"
-    assert sheet["E2"].value is None
+    assert sheet["C2"].value == "Area"
+    assert sheet["D2"].value == "VSTS10.cs"
+    for column in "EFGHIJK":
+        assert sheet[f"{column}2"].value is None
     assert sheet.freeze_panes == "A2"
-    assert set(RESULT_COLUMN_KEYS) == {"round1", "round2", "single", "manual"}
