@@ -23,13 +23,6 @@ WORKBOOK_HEADERS = [
     "Defects",
 ]
 
-RESULT_COLUMN_KEYS = {
-    "round1": "Round 1 results",
-    "round2": "Round 2 results",
-    "single": "Single run results",
-    "manual": "Manual run",
-}
-
 
 def _normalize(value: str) -> str:
     return re.sub(r"[^a-z0-9]", "", value.lower())
@@ -48,14 +41,6 @@ def _field_value(fields: dict[str, Any], aliases: set[str]) -> str:
                 return str(value.get("displayName") or value.get("name") or value.get("value") or "")
             return str(value)
     return ""
-
-
-def _normalize_outcome(value: Any) -> str:
-    raw = str(value or "unspecified")
-    outcome = re.sub(r"(?<=[a-z])(?=[A-Z])", " ", raw).replace("_", " ").title()
-    if outcome in {"None", "Not Executed", "Not Run"}:
-        return "Not Run"
-    return outcome
 
 
 def _excel_safe(value: Any) -> Any:
@@ -132,7 +117,6 @@ class TestAssignmentWorkbookService:
                 "testCaseId": int(reference["id"]),
                 "tester": display_name or unique_name,
                 "testerAliases": [name for name in (display_name, unique_name) if name],
-                "outcome": _normalize_outcome((point.get("results") or {}).get("outcome")),
             })
         return rows
 
@@ -161,21 +145,14 @@ class TestAssignmentWorkbookService:
                 + ". Enter the exact display name or email."
             )
 
-        outcomes_by_case: dict[int, list[str]] = {}
-        for point in candidates:
-            outcomes = outcomes_by_case.setdefault(point["testCaseId"], [])
-            if point["outcome"] not in outcomes:
-                outcomes.append(point["outcome"])
-
+        assigned_case_ids = {point["testCaseId"] for point in candidates}
         assigned_rows: list[dict[str, Any]] = []
         for case in define_cases:
-            outcomes = outcomes_by_case.get(case["testCaseId"])
-            if not outcomes:
+            if case["testCaseId"] not in assigned_case_ids:
                 continue
             assigned_rows.append({
                 **case,
                 "tester": matched_names[0] if matched_names else query,
-                "outcome": " / ".join(outcomes),
             })
 
         return {
@@ -186,17 +163,12 @@ class TestAssignmentWorkbookService:
         }
 
     @staticmethod
-    def make_workbook(rows: list[dict[str, Any]], result_column_key: str) -> BytesIO:
-        result_header = RESULT_COLUMN_KEYS.get(result_column_key)
-        if not result_header:
-            raise ValueError("Invalid result destination.")
-
+    def make_workbook(rows: list[dict[str, Any]]) -> BytesIO:
         workbook = Workbook()
         sheet = workbook.active
         sheet.title = "Main"
         sheet.append(WORKBOOK_HEADERS)
 
-        result_index = WORKBOOK_HEADERS.index(result_header)
         for row in rows:
             values: list[Any] = [
                 row.get("testCaseId"),
@@ -205,7 +177,6 @@ class TestAssignmentWorkbookService:
                 row.get("automationScriptName", ""),
                 "", "", "", "", "", "", "",
             ]
-            values[result_index] = row.get("outcome", "")
             sheet.append([_excel_safe(value) for value in values])
 
         header_fill = PatternFill("solid", fgColor="1F4E78")
