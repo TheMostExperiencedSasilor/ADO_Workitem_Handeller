@@ -24,7 +24,32 @@
     tabList.setAttribute('role', 'tablist');
     tabList.setAttribute('aria-label', 'Application sections');
 
-    const tabs = panels.map((panel, index) => {
+    const tabs = [];
+
+    function slugFor(label) {
+      return label
+        .toLowerCase()
+        .replace(/\s*\/\s*/g, '-')
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, '');
+    }
+
+    function activateTab(index, updateHash = false) {
+      tabs.forEach((tab, tabIndex) => {
+        const active = tabIndex === index;
+        tab.classList.toggle('active', active);
+        tab.setAttribute('aria-selected', String(active));
+        tab.tabIndex = active ? 0 : -1;
+        panels[tabIndex].hidden = !active;
+        panels[tabIndex].classList.toggle('active', active);
+      });
+
+      if (updateHash) {
+        history.replaceState(null, '', `#${slugFor(tabs[index].textContent)}`);
+      }
+    }
+
+    panels.forEach((panel, index) => {
       const panelId = `main-tab-panel-${index}`;
       const tabId = `main-tab-${index}`;
       const button = document.createElement('button');
@@ -43,6 +68,9 @@
         || panel.querySelector('h2')?.textContent?.trim()
         || `Section ${index + 1}`;
 
+      tabs.push(button);
+      tabList.appendChild(button);
+
       button.addEventListener('click', () => activateTab(index, true));
       button.addEventListener('keydown', (event) => {
         if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
@@ -57,40 +85,12 @@
         activateTab(nextIndex, true);
         tabs[nextIndex].focus();
       });
-
-      tabList.appendChild(button);
-      return button;
     });
-
-    function activateTab(index, updateHash = false) {
-      tabs.forEach((tab, tabIndex) => {
-        const active = tabIndex === index;
-        tab.classList.toggle('active', active);
-        tab.setAttribute('aria-selected', String(active));
-        tab.tabIndex = active ? 0 : -1;
-        panels[tabIndex].hidden = !active;
-        panels[tabIndex].classList.toggle('active', active);
-      });
-
-      if (updateHash) {
-        const slug = tabs[index].textContent
-          .toLowerCase()
-          .replace(/\s*\/\s*/g, '-')
-          .replace(/[^a-z0-9]+/g, '-')
-          .replace(/^-|-$/g, '');
-        history.replaceState(null, '', `#${slug}`);
-      }
-    }
 
     layout.before(tabList);
 
     const hash = window.location.hash.slice(1).toLowerCase();
-    const hashIndex = tabs.findIndex((tab) => tab.textContent
-      .toLowerCase()
-      .replace(/\s*\/\s*/g, '-')
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-|-$/g, '') === hash);
-
+    const hashIndex = tabs.findIndex((tab) => slugFor(tab.textContent) === hash);
     activateTab(hashIndex >= 0 ? hashIndex : DEFAULT_TAB_INDEX);
   }
 
