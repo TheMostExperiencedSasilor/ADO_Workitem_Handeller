@@ -74,11 +74,10 @@ def assignment_preview():
 @assignment_workbook_bp.post("/assignment-workbook")
 def assignment_workbook():
     try:
-        payload, plan_id, suite_id, tester = _read_payload()
-        result_column = str(payload.get("resultColumn", "round1")).strip().lower()
+        _, plan_id, suite_id, tester = _read_payload()
         service = _service()
         result = service.build_assignment_rows(plan_id, suite_id, tester)
-        workbook = service.make_workbook(result["rows"], result_column)
+        workbook = service.make_workbook(result["rows"])
     except ValueError as error:
         return jsonify({"error": str(error)}), 400
     except (RuntimeError, requests.RequestException) as error:
