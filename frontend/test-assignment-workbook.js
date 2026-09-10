@@ -9,7 +9,7 @@
     <div class="assignment-workbook-heading">
       <div>
         <h3>Assignment Workbook</h3>
-        <p>Read Define for included test-case metadata, then match Execute assignments for one tester and export a one-sheet Excel workbook.</p>
+        <p>Read Define for included test-case metadata, then use Execute only to find cases assigned to one tester.</p>
       </div>
       <span class="mini-status">Define + Execute</span>
     </div>
@@ -22,15 +22,6 @@
       <div>
         <label for="assignmentWorkbookTester">Assigned tester</label>
         <input id="assignmentWorkbookTester" type="text" placeholder="Display name or email">
-      </div>
-      <div>
-        <label for="assignmentWorkbookResultColumn">Put current Execute outcome in</label>
-        <select id="assignmentWorkbookResultColumn">
-          <option value="round1">Round 1 results</option>
-          <option value="round2">Round 2 results</option>
-          <option value="single">Single run results</option>
-          <option value="manual">Manual run</option>
-        </select>
       </div>
     </div>
 
@@ -50,19 +41,18 @@
               <th>Title</th>
               <th>Product Area</th>
               <th>Automation Script Name</th>
-              <th>Execute Outcome</th>
             </tr>
           </thead>
           <tbody id="assignmentWorkbookRows"></tbody>
         </table>
       </div>
+      <p class="mini-status">Excel tracking columns are included but left empty: Round 1 results, Round 2 results, Single run results, Manual run, Comment, Solution, Defects.</p>
     </div>`;
 
   panel.appendChild(section);
 
   const urlInput = section.querySelector('#assignmentWorkbookUrl');
   const testerInput = section.querySelector('#assignmentWorkbookTester');
-  const resultColumn = section.querySelector('#assignmentWorkbookResultColumn');
   const previewButton = section.querySelector('#previewAssignmentWorkbook');
   const exportButton = section.querySelector('#exportAssignmentWorkbook');
   const status = section.querySelector('#assignmentWorkbookStatus');
@@ -70,13 +60,11 @@
   const summary = section.querySelector('#assignmentWorkbookSummary');
   const rowsBody = section.querySelector('#assignmentWorkbookRows');
 
-  function payload(includeResultColumn = false) {
-    const value = {
+  function payload() {
+    return {
       url: urlInput.value.trim(),
       tester: testerInput.value.trim(),
     };
-    if (includeResultColumn) value.resultColumn = resultColumn.value;
-    return value;
   }
 
   function setStatus(message, error = false) {
@@ -102,7 +90,7 @@
     const fragment = document.createDocumentFragment();
     for (const row of data.rows || []) {
       const tr = document.createElement('tr');
-      for (const value of [row.testCaseId, row.title, row.productArea, row.automationScriptName, row.outcome]) {
+      for (const value of [row.testCaseId, row.title, row.productArea, row.automationScriptName]) {
         const td = document.createElement('td');
         td.textContent = value ?? '';
         tr.appendChild(td);
@@ -153,7 +141,7 @@
       const response = await fetch('/api/test-plans/assignment-workbook', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload(true)),
+        body: JSON.stringify(payload()),
       });
       if (!response.ok) {
         const data = await response.json().catch(() => ({}));
