@@ -48,11 +48,8 @@
           <label for="aiModel">AI model</label>
           <input id="aiModel" type="text" value="openai/gpt-4.1-mini">
         </div>
-        <div>
-          <label for="githubToken">GitHub / AI token</label>
-          <input id="githubToken" type="password" autocomplete="off" placeholder="Saved to backend .env only">
-        </div>
       </div>
+      <input id="githubToken" type="hidden" value="">
       <div class="action-row">
         <button id="saveSetupButton">Save setup</button>
         <button id="checkSetupButton" class="secondary-button">Check setup</button>
