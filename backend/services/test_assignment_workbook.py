@@ -2,7 +2,7 @@ import re
 from io import BytesIO
 from typing import Any
 
-from openpyxl import Workbook
+from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.worksheet.table import Table, TableStyleInfo
 
@@ -22,6 +22,13 @@ WORKBOOK_HEADERS = [
     "Solution",
     "Defects",
 ]
+
+RESULT_KEYS = {
+    "round1Results": "Round 1 results",
+    "round2Results": "Round 2 results",
+    "singleRunResults": "Single run results",
+    "manualRun": "Manual run",
+}
 
 
 def _normalize(value: str) -> str:
@@ -153,6 +160,13 @@ class TestAssignmentWorkbookService:
             assigned_rows.append({
                 **case,
                 "tester": matched_names[0] if matched_names else query,
+                "round1Results": "",
+                "round2Results": "",
+                "singleRunResults": "",
+                "manualRun": "",
+                "comment": "",
+                "solution": "",
+                "defects": "",
             })
 
         return {
@@ -175,7 +189,13 @@ class TestAssignmentWorkbookService:
                 row.get("title", ""),
                 row.get("productArea", ""),
                 row.get("automationScriptName", ""),
-                "", "", "", "", "", "", "",
+                row.get("round1Results", ""),
+                row.get("round2Results", ""),
+                row.get("singleRunResults", ""),
+                row.get("manualRun", ""),
+                row.get("comment", ""),
+                row.get("solution", ""),
+                row.get("defects", ""),
             ]
             sheet.append([_excel_safe(value) for value in values])
 
@@ -212,3 +232,63 @@ class TestAssignmentWorkbookService:
         workbook.save(output)
         output.seek(0)
         return output
+
+    @staticmethod
+    def transfer_to_ote(ote_bytes: bytes, rows: list[dict[str, Any]], result_key: str) -> tuple[BytesIO, int]:
+        if result_key not in RESULT_KEYS:
+            raise ValueError("Choose a valid result column to transfer to OTE.")
+
+        outcome_by_case = {
+            int(row["testCaseId"]): str(row.get(result_key, "")).strip()
+            for row in rows
+            if row.get("testCaseId") and str(row.get(result_key, "")).strip()
+        }
+        if not outcome_by_case:
+            raise ValueError("The selected result column has no outcomes to transfer.")
+
+        workbook = load_workbook(BytesIO(ote_bytes))
+        updated_cases: set[int] = set()
+
+        for sheet in workbook.worksheets:
+            headers = {
+                str(cell.value).strip(): cell.column
+                for cell in sheet[1]
+                if cell.value is not None
+            }
+            case_col = headers.get("TestCaseId")
+            title_col = headers.get("Title")
+            outcome_col = headers.get("Outcome")
+            if not case_col or not outcome_col:
+                continue
+
+            current_case_id: int | None = None
+            current_outcome = ""
+            for row_index in range(2, sheet.max_row + 1):
+                raw_case = sheet.cell(row=row_index, column=case_col).value
+                raw_title = sheet.cell(row=row_index, column=title_col).value if title_col else None
+                try:
+                    candidate_id = int(raw_case)
+                except (TypeError, ValueError):
+                    candidate_id = None
+
+                # OTE exports use placeholder values on step rows. A genuine case row has
+                # a real TestCaseId plus a real title; subsequent step rows belong to it.
+                is_case_header = candidate_id is not None and (
+                    title_col is None or str(raw_title or "").strip() not in {"", "11"}
+                )
+                if is_case_header:
+                    current_case_id = candidate_id
+                    current_outcome = outcome_by_case.get(candidate_id, "")
+                    if current_outcome:
+                        updated_cases.add(candidate_id)
+
+                if current_case_id is not None and current_outcome:
+                    sheet.cell(row=row_index, column=outcome_col).value = current_outcome
+
+        if not updated_cases:
+            raise ValueError("No matching TestCaseId values were found in the selected OTE workbook.")
+
+        output = BytesIO()
+        workbook.save(output)
+        output.seek(0)
+        return output, len(updated_cases)
