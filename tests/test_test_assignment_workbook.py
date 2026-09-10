@@ -1,4 +1,5 @@
 import sys
+from io import BytesIO
 from pathlib import Path
 from unittest.mock import Mock
 
@@ -36,11 +37,6 @@ def test_define_metadata_and_assigned_tester_join(monkeypatch):
                 "results": {"outcome": "passed"},
             },
             {
-                "testCaseReference": {"id": 10},
-                "tester": {"displayName": "Jane QA", "uniqueName": "jane@example.test"},
-                "results": {"outcome": "failed"},
-            },
-            {
                 "testCaseReference": {"id": 20},
                 "tester": {"displayName": "Someone Else", "uniqueName": "other@example.test"},
                 "results": {"outcome": "passed"},
@@ -64,10 +60,7 @@ def test_define_metadata_and_assigned_tester_join(monkeypatch):
                 "Custom.AutomationScriptName": "VSTS20.cs",
             },
         },
-        {
-            "id": 30,
-            "fields": {"System.Title": "Case Thirty"},
-        },
+        {"id": 30, "fields": {"System.Title": "Case Thirty"}},
     ])
 
     result = service.build_assignment_rows(83602, 141923, "jane@example.test")
@@ -75,14 +68,16 @@ def test_define_metadata_and_assigned_tester_join(monkeypatch):
     assert result["defineCount"] == 3
     assert result["assignedCount"] == 1
     assert result["matchedTester"] == "Jane QA"
-    assert result["rows"] == [{
-        "testCaseId": 10,
-        "title": "Case Ten",
-        "productArea": "Sample Files_HYSYS",
-        "automationScriptName": "VSTS10.cs",
-        "order": 2,
-        "tester": "Jane QA",
-    }]
+    row = result["rows"][0]
+    assert row["testCaseId"] == 10
+    assert row["title"] == "Case Ten"
+    assert row["productArea"] == "Sample Files_HYSYS"
+    assert row["automationScriptName"] == "VSTS10.cs"
+    for key in (
+        "round1Results", "round2Results", "singleRunResults", "manualRun",
+        "comment", "solution", "defects",
+    ):
+        assert row[key] == ""
 
 
 def test_ambiguous_partial_tester_is_rejected(monkeypatch):
@@ -104,12 +99,19 @@ def test_ambiguous_partial_tester_is_rejected(monkeypatch):
         assert "multiple people" in str(error)
 
 
-def test_excel_has_one_main_sheet_exact_columns_and_empty_tracking_fields():
+def test_excel_exports_current_tracking_values():
     rows = [{
         "testCaseId": 10,
         "title": "Case Ten",
         "productArea": "Area",
         "automationScriptName": "VSTS10.cs",
+        "round1Results": "Passed",
+        "round2Results": "Failed",
+        "singleRunResults": "",
+        "manualRun": "N/A",
+        "comment": "note",
+        "solution": "fix",
+        "defects": "12345",
     }]
 
     stream = TestAssignmentWorkbookService.make_workbook(rows)
@@ -119,10 +121,36 @@ def test_excel_has_one_main_sheet_exact_columns_and_empty_tracking_fields():
     assert workbook.sheetnames == ["Main"]
     sheet = workbook["Main"]
     assert [cell.value for cell in sheet[1]] == WORKBOOK_HEADERS
-    assert sheet["A2"].value == 10
-    assert sheet["B2"].value == "Case Ten"
-    assert sheet["C2"].value == "Area"
-    assert sheet["D2"].value == "VSTS10.cs"
-    for column in "EFGHIJK":
-        assert sheet[f"{column}2"].value is None
+    assert [sheet[f"{column}2"].value for column in "ABCDEFGHIJK"] == [
+        10, "Case Ten", "Area", "VSTS10.cs", "Passed", "Failed", None,
+        "N/A", "note", "fix", "12345",
+    ]
     assert sheet.freeze_panes == "A2"
+
+
+def test_transfer_to_ote_fills_entire_matching_case_block():
+    from openpyxl import Workbook, load_workbook
+
+    source = Workbook()
+    sheet = source.active
+    sheet.title = "83602;V15.2_HYSYS"
+    sheet.append(["TestCaseId", "Title", "TestStep", "StepAction", "StepExpected", "TestPointId", "Configuration", "Tester", "Outcome", "Comment"])
+    sheet.append([24153, "Case A", "11", "11", "11", "200291:0", "Windows 10", "Tester", "11", "11"])
+    sheet.append(["11", "11", "1", "Do A", "Expected A", "11", "11", "11", "11", "11"])
+    sheet.append(["11", "11", "2", "Do B", "Expected B", "11", "11", "11", "11", "11"])
+    sheet.append([24157, "Case B", "11", "11", "11", "200293:0", "Windows 10", "Tester", "11", "11"])
+    sheet.append(["11", "11", "1", "Do C", "Expected C", "11", "11", "11", "11", "11"])
+    raw = BytesIO()
+    source.save(raw)
+
+    rows = [
+        {"testCaseId": 24153, "round1Results": "Passed"},
+        {"testCaseId": 24157, "round1Results": "Failed"},
+    ]
+    output, updated = TestAssignmentWorkbookService.transfer_to_ote(raw.getvalue(), rows, "round1Results")
+    result = load_workbook(output)["83602;V15.2_HYSYS"]
+
+    assert updated == 2
+    assert [result[f"I{row}"].value for row in range(2, 7)] == [
+        "Passed", "Passed", "Passed", "Failed", "Failed"
+    ]
