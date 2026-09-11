@@ -165,3 +165,20 @@
   opacity: 0.45;
   cursor: not-allowed;
 }
+
+
+.danger-button {
+  background: #fff5f5;
+  border-color: #dc2626;
+  color: #b91c1c;
+}
+
+.danger-button:hover:not(:disabled) {
+  background: #fee2e2;
+  border-color: #b91c1c;
+}
+
+.danger-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
