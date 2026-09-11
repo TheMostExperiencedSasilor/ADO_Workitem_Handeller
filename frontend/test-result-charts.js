@@ -11,11 +11,11 @@
 
   const outcomeOrder = ['Passed', 'Failed', 'Blocked', 'Not Run', 'Other'];
   const outcomeClass = {
-    Passed: 'passed',
-    Failed: 'failed',
-    Blocked: 'blocked',
-    'Not Run': 'not-run',
-    Other: 'other',
+    Passed: 'chart-passed',
+    Failed: 'chart-failed',
+    Blocked: 'chart-blocked',
+    'Not Run': 'chart-not-run',
+    Other: 'chart-other',
   };
 
   function setStatus(message, error = false) {
