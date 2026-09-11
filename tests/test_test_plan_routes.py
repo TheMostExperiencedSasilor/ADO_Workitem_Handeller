@@ -21,7 +21,11 @@ def config(monkeypatch):
     return AppConfig.from_env()
 
 
-@pytest.mark.parametrize('url', [URL, URL.replace('planId=83602&suiteId=106867', 'suiteId=106867&extra=x&planId=83602')])
+@pytest.mark.parametrize('url', [
+    URL,
+    URL.replace('/_testPlans/execute?', '/_testPlans/define?'),
+    URL.replace('planId=83602&suiteId=106867', 'suiteId=106867&extra=x&planId=83602'),
+])
 def test_valid_url(url):
     assert parse_test_plan_url(url) == (83602, 106867)
 
@@ -45,7 +49,8 @@ def test_invalid_urls(url):
         parse_test_plan_url(url)
 
 
-def test_summary_and_empty_suite(config, monkeypatch):
+@pytest.mark.parametrize('url', [URL, URL.replace('/_testPlans/execute?', '/_testPlans/define?')])
+def test_summary_and_empty_suite(config, monkeypatch, url):
     client = create_app().test_client()
     for points, summary in [
         ([{'outcome': outcome} for outcome in ['Passed', 'Failed', 'Blocked', 'Not Run', 'Unspecified']],
@@ -54,7 +59,7 @@ def test_summary_and_empty_suite(config, monkeypatch):
     ]:
         read = Mock(return_value=points)
         monkeypatch.setattr(AdoClient, 'read_test_points', read)
-        response = client.post('/api/test-plans/read-suite', json={'url': URL})
+        response = client.post('/api/test-plans/read-suite', json={'url': url})
         assert response.status_code == 200
         assert response.json['summary'] == summary
         assert response.json['testPoints'] == points
@@ -170,7 +175,11 @@ def test_summary_section_is_served_and_endpoint_registered():
     assert response.status_code == 200
     html = response.get_data(as_text=True)
     assert '<h2 id="testPlanHeading">Test Result Summary</h2>' in html
-    assert html.index('id="saveSetupButton"') < html.index('id="testPlanHeading"') < html.index('class="panel work-type-panel"')
+    assert 'id="testResultsSummaryTab"' in html
+    assert 'id="testResultsTrackerTab"' in html
+    assert 'id="testResultsSummaryPanel"' in html
+    assert 'id="testResultsTrackerPanel"' in html
+    assert html.index('id="saveSetupButton"') < html.index('id="testResultsSummaryTab"') < html.index('id="testPlanHeading"') < html.index('class="panel work-type-panel"')
     for element_id in ("testPlanUrl", "loadTestSuiteButton", "testSuiteSummary", "testSuiteRows",
                        "copyTestSuiteButton", "copyFailedTestsButton"):
         assert f'id="{element_id}"' in html

@@ -1,6 +1,7 @@
 (() => {
   const panel = document.querySelector('.test-plan-panel');
-  if (!panel || document.querySelector('#assignmentWorkbookSection')) return;
+  const trackerPanel = document.querySelector('#testResultsTrackerPanel');
+  if (!panel || !trackerPanel || document.querySelector('#assignmentWorkbookSection')) return;
 
   const resultOptions = ['', 'Passed', 'Failed', 'Blocked', 'Not Run', 'N/A'];
   const editableKeys = [
@@ -78,7 +79,7 @@
       </form>
     </dialog>`;
 
-  panel.appendChild(section);
+  trackerPanel.appendChild(section);
 
   const urlInput = section.querySelector('#assignmentWorkbookUrl');
   const testerInput = section.querySelector('#assignmentWorkbookTester');
@@ -336,10 +337,54 @@
 
   const primaryUrl = document.querySelector('#testPlanUrl');
   if (primaryUrl) {
-    const syncUrl = () => {
-      if (!urlInput.value.trim()) urlInput.value = primaryUrl.value.trim();
+    let syncingUrl = false;
+    const syncValue = (source, target) => {
+      if (syncingUrl) return;
+      syncingUrl = true;
+      target.value = source.value;
+      syncingUrl = false;
     };
-    primaryUrl.addEventListener('change', syncUrl);
-    syncUrl();
+    primaryUrl.addEventListener('input', () => syncValue(primaryUrl, urlInput));
+    urlInput.addEventListener('input', () => syncValue(urlInput, primaryUrl));
+    if (primaryUrl.value.trim()) urlInput.value = primaryUrl.value.trim();
   }
+
+  const subTabs = [
+    {
+      tab: document.querySelector('#testResultsSummaryTab'),
+      panel: document.querySelector('#testResultsSummaryPanel'),
+    },
+    {
+      tab: document.querySelector('#testResultsTrackerTab'),
+      panel: document.querySelector('#testResultsTrackerPanel'),
+    },
+  ].filter((item) => item.tab && item.panel);
+
+  function activateResultSubtab(index, focus = false) {
+    subTabs.forEach((item, itemIndex) => {
+      const active = itemIndex === index;
+      item.tab.classList.toggle('active', active);
+      item.tab.setAttribute('aria-selected', String(active));
+      item.tab.tabIndex = active ? 0 : -1;
+      item.panel.hidden = !active;
+      item.panel.classList.toggle('active', active);
+    });
+    if (focus) subTabs[index]?.tab.focus();
+  }
+
+  subTabs.forEach((item, index) => {
+    item.tab.addEventListener('click', () => activateResultSubtab(index));
+    item.tab.addEventListener('keydown', (event) => {
+      if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+      event.preventDefault();
+      let nextIndex = index;
+      if (event.key === 'ArrowLeft') nextIndex = (index - 1 + subTabs.length) % subTabs.length;
+      if (event.key === 'ArrowRight') nextIndex = (index + 1) % subTabs.length;
+      if (event.key === 'Home') nextIndex = 0;
+      if (event.key === 'End') nextIndex = subTabs.length - 1;
+      activateResultSubtab(nextIndex, true);
+    });
+  });
+
+  if (subTabs.length) activateResultSubtab(0);
 })();

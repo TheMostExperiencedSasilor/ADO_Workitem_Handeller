@@ -1,7 +1,44 @@
+.test-results-subtabs {
+  display: flex;
+  gap: 4px;
+  margin: -4px -4px 20px;
+  padding: 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.test-results-subtab {
+  margin: 0 0 -5px;
+  padding: 10px 14px;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  border-radius: 6px 6px 0 0;
+  background: transparent;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.test-results-subtab:hover {
+  background: #eef4ff;
+  color: var(--text);
+}
+
+.test-results-subtab.active {
+  border-bottom-color: var(--accent);
+  background: #f7faff;
+  color: var(--accent-dark);
+}
+
+.test-results-subtab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.test-results-subpanel[hidden] {
+  display: none !important;
+}
+
 .assignment-workbook-section {
-  margin-top: 24px;
-  padding-top: 22px;
-  border-top: 1px solid var(--border);
+  margin-top: 0;
 }
 
 .assignment-workbook-heading {
