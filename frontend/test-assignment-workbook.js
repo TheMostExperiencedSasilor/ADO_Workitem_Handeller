@@ -40,6 +40,7 @@
       <button id="openAssignmentJson" type="button" class="secondary-button">Open Work</button>
       <button id="exportAssignmentWorkbook" type="button" class="secondary-button" disabled>Export Excel</button>
       <button id="transferAssignmentToOte" type="button" class="secondary-button" disabled>Transfer to OTE</button>
+      <button id="clearAssignmentResults" type="button" class="danger-button" disabled>Clear all results</button>
       <input id="assignmentJsonFile" type="file" accept="application/json,.json" hidden>
       <input id="assignmentOteFile" type="file" accept="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.xlsx" hidden>
     </div>
@@ -88,6 +89,7 @@
   const openButton = section.querySelector('#openAssignmentJson');
   const exportButton = section.querySelector('#exportAssignmentWorkbook');
   const transferButton = section.querySelector('#transferAssignmentToOte');
+  const clearResultsButton = section.querySelector('#clearAssignmentResults');
   const jsonFileInput = section.querySelector('#assignmentJsonFile');
   const oteFileInput = section.querySelector('#assignmentOteFile');
   const transferDialog = section.querySelector('#oteTransferDialog');
@@ -109,6 +111,7 @@
     saveButton.disabled = !enabled;
     exportButton.disabled = !enabled;
     transferButton.disabled = !enabled;
+    clearResultsButton.disabled = !enabled;
   }
 
   function makeResultSelect(row, key) {
@@ -248,6 +251,20 @@
     } finally {
       previewButton.disabled = false;
     }
+  });
+
+  clearResultsButton.addEventListener('click', () => {
+    if (!trackedRows.length) return;
+    const confirmed = window.confirm(
+      'Clear all logged results, comments, solutions and defects? Test case metadata will be kept.'
+    );
+    if (!confirmed) return;
+
+    for (const row of trackedRows) {
+      for (const key of editableKeys) row[key] = '';
+    }
+    renderRows();
+    setStatus('All logged results were cleared. Test case metadata was kept.');
   });
 
   saveButton.addEventListener('click', () => {
