@@ -24,6 +24,7 @@ def config(monkeypatch):
 @pytest.mark.parametrize('url', [
     URL,
     URL.replace('/_testPlans/execute?', '/_testPlans/define?'),
+    URL.replace('/_testPlans/execute?', '/_testPlans/charts?'),
     URL.replace('planId=83602&suiteId=106867', 'suiteId=106867&extra=x&planId=83602'),
 ])
 def test_valid_url(url):
@@ -49,7 +50,11 @@ def test_invalid_urls(url):
         parse_test_plan_url(url)
 
 
-@pytest.mark.parametrize('url', [URL, URL.replace('/_testPlans/execute?', '/_testPlans/define?')])
+@pytest.mark.parametrize('url', [
+    URL,
+    URL.replace('/_testPlans/execute?', '/_testPlans/define?'),
+    URL.replace('/_testPlans/execute?', '/_testPlans/charts?'),
+])
 def test_summary_and_empty_suite(config, monkeypatch, url):
     client = create_app().test_client()
     for points, summary in [
@@ -177,8 +182,10 @@ def test_summary_section_is_served_and_endpoint_registered():
     assert '<h2 id="testPlanHeading">Test Result Summary</h2>' in html
     assert 'id="testResultsSummaryTab"' in html
     assert 'id="testResultsTrackerTab"' in html
+    assert 'id="testResultsChartsTab"' in html
     assert 'id="testResultsSummaryPanel"' in html
     assert 'id="testResultsTrackerPanel"' in html
+    assert 'id="testResultsChartsPanel"' in html
     assert html.index('id="saveSetupButton"') < html.index('id="testResultsSummaryTab"') < html.index('id="testPlanHeading"') < html.index('class="panel work-type-panel"')
     for element_id in ("testPlanUrl", "loadTestSuiteButton", "testSuiteSummary", "testSuiteRows",
                        "copyTestSuiteButton", "copyFailedTestsButton"):

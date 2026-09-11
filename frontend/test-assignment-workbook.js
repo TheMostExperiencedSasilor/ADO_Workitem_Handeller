@@ -336,17 +336,24 @@
   });
 
   const primaryUrl = document.querySelector('#testPlanUrl');
+  const chartsUrl = document.querySelector('#testChartsUrl');
   if (primaryUrl) {
     let syncingUrl = false;
-    const syncValue = (source, target) => {
+    const inputs = [primaryUrl, urlInput, chartsUrl].filter(Boolean);
+    const syncFrom = (source) => {
       if (syncingUrl) return;
       syncingUrl = true;
-      target.value = source.value;
+      for (const input of inputs) {
+        if (input !== source) input.value = source.value;
+      }
       syncingUrl = false;
     };
-    primaryUrl.addEventListener('input', () => syncValue(primaryUrl, urlInput));
-    urlInput.addEventListener('input', () => syncValue(urlInput, primaryUrl));
-    if (primaryUrl.value.trim()) urlInput.value = primaryUrl.value.trim();
+    inputs.forEach((input) => input.addEventListener('input', () => syncFrom(input)));
+    if (primaryUrl.value.trim()) {
+      for (const input of inputs) {
+        if (input !== primaryUrl) input.value = primaryUrl.value.trim();
+      }
+    }
   }
 
   const subTabs = [
@@ -357,6 +364,10 @@
     {
       tab: document.querySelector('#testResultsTrackerTab'),
       panel: document.querySelector('#testResultsTrackerPanel'),
+    },
+    {
+      tab: document.querySelector('#testResultsChartsTab'),
+      panel: document.querySelector('#testResultsChartsPanel'),
     },
   ].filter((item) => item.tab && item.panel);
 

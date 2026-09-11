@@ -16,7 +16,7 @@ def parse_test_plan_url(value: str) -> tuple[int, int]:
     try:
         parsed = urlparse(value.strip())
         normalized_path = parsed.path.rstrip("/")
-        valid_view = normalized_path.endswith("/_testPlans/define") or normalized_path.endswith("/_testPlans/execute")
+        valid_view = any(normalized_path.endswith(f"/_testPlans/{view}") for view in ("define", "execute", "charts"))
         valid = (parsed.scheme in {"http", "https"} and parsed.hostname
                  and not parsed.username and not parsed.password
                  and valid_view)
@@ -26,7 +26,7 @@ def parse_test_plan_url(value: str) -> tuple[int, int]:
         query = parse_qs(parsed.query, keep_blank_values=True)
     except ValueError:
         raise ValueError(
-            "Invalid URL. Paste an Azure DevOps Test Plan Define or Execute URL containing planId and suiteId."
+            "Invalid URL. Paste an Azure DevOps Test Plan Define, Execute or Charts URL containing planId and suiteId."
         ) from None
     ids = []
     for name in ("planId", "suiteId"):
