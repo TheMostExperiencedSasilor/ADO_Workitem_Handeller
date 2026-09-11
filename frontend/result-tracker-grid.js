@@ -141,6 +141,9 @@
     entries.forEach((entry)=>{const tr=byId.get(String(entry.testCaseId)); if(!tr)return; matched++; const cell=tr.cells[editableOffset+c], control=cell?.querySelector('select'); if(!control)return; const next=mergeResult(control.value,entry.result); if(control.value!==next){control.value=next;control.dispatchEvent(new Event('change',{bubbles:true}));changed++;}});
     const s=document.querySelector('#assignmentWorkbookStatus'); if(s) s.textContent=name+': matched '+matched+' case(s), updated '+changed+' cell(s) in '+target.options[target.selectedIndex].text+'.';
   };
+  const syncImportButtons=()=>{ const enabled=body.rows.length>0; csvBtn.disabled=!enabled; txtBtn.disabled=!enabled; };
+  new MutationObserver(syncImportButtons).observe(body,{childList:true});
+  syncImportButtons();
   csvBtn.onclick=()=>csvInput.click(); txtBtn.onclick=()=>txtInput.click();
   csvInput.onchange=async()=>{const f=csvInput.files?.[0]; if(!f)return; try{importEntries(parseResultCsv(await f.text()),f.name);}catch(err){const s=document.querySelector('#assignmentWorkbookStatus');if(s)s.textContent=err.message;}finally{csvInput.value='';}};
   txtInput.onchange=async()=>{const f=txtInput.files?.[0]; if(!f)return; try{importEntries(parseTestResultTxt(await f.text()),f.name);}catch(err){const s=document.querySelector('#assignmentWorkbookStatus');if(s)s.textContent=err.message;}finally{txtInput.value='';}};
