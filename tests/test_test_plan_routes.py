@@ -175,7 +175,11 @@ def test_summary_section_is_served_and_endpoint_registered():
     assert response.status_code == 200
     html = response.get_data(as_text=True)
     assert '<h2 id="testPlanHeading">Test Result Summary</h2>' in html
-    assert html.index('id="saveSetupButton"') < html.index('id="testPlanHeading"') < html.index('class="panel work-type-panel"')
+    assert 'id="testResultsSummaryTab"' in html
+    assert 'id="testResultsTrackerTab"' in html
+    assert 'id="testResultsSummaryPanel"' in html
+    assert 'id="testResultsTrackerPanel"' in html
+    assert html.index('id="saveSetupButton"') < html.index('id="testResultsSummaryTab"') < html.index('id="testPlanHeading"') < html.index('class="panel work-type-panel"')
     for element_id in ("testPlanUrl", "loadTestSuiteButton", "testSuiteSummary", "testSuiteRows",
                        "copyTestSuiteButton", "copyFailedTestsButton"):
         assert f'id="{element_id}"' in html
