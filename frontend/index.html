@@ -58,7 +58,16 @@
       </div>
     </section>
 
-    <section class="panel test-plan-panel" aria-labelledby="testPlanHeading">
+    <section class="panel test-plan-panel" aria-label="Test Results">
+      <div class="test-results-subtabs" role="tablist" aria-label="Test result functions">
+        <button id="testResultsSummaryTab" class="test-results-subtab active" type="button" role="tab"
+                aria-selected="true" aria-controls="testResultsSummaryPanel">Summary</button>
+        <button id="testResultsTrackerTab" class="test-results-subtab" type="button" role="tab"
+                aria-selected="false" aria-controls="testResultsTrackerPanel" tabindex="-1">Result Tracker</button>
+      </div>
+
+      <div id="testResultsSummaryPanel" class="test-results-subpanel active" role="tabpanel"
+           aria-labelledby="testResultsSummaryTab">
       <h2 id="testPlanHeading">Test Result Summary</h2>
       <form id="testSuiteForm">
         <label for="testPlanUrl">Azure DevOps Test Plan URL</label>
@@ -91,6 +100,10 @@
           </table>
         </div>
       </div>
+      </div>
+
+      <div id="testResultsTrackerPanel" class="test-results-subpanel" role="tabpanel"
+           aria-labelledby="testResultsTrackerTab" hidden></div>
     </section>
 
     <section class="panel work-type-panel">
