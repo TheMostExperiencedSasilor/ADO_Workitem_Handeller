@@ -328,7 +328,23 @@
       downloadBlob(await response.blob(), filename);
       setStatus(`Transferred outcomes for ${updated} Test Case(s) into OTE: ${filename}`);
     } catch (error) {
-      setStatus(error.message || 'Unable to transfer results to OTE.', true);
+      if (error instanceof TypeError && /fetch/i.test(error.message || '')) {
+        let backendAvailable = false;
+        try {
+          const health = await fetch('/api/health', { cache: 'no-store' });
+          backendAvailable = health.ok;
+        } catch {
+          backendAvailable = false;
+        }
+        setStatus(
+          backendAvailable
+            ? 'OTE transfer connection was interrupted while processing the workbook. Please try again.'
+            : 'Backend connection was lost during OTE transfer. Keep the launcher window open, restart the app if needed, then try again.',
+          true
+        );
+      } else {
+        setStatus(error.message || 'Unable to transfer results to OTE.', true);
+      }
     } finally {
       oteFileInput.value = '';
       enableWorkActions();

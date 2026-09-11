@@ -1,6 +1,9 @@
+import posixpath
 import re
 from io import BytesIO
 from typing import Any
+from zipfile import ZIP_DEFLATED, BadZipFile, ZipFile
+from xml.etree import ElementTree as ET
 
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Alignment, Font, PatternFill
@@ -246,35 +249,133 @@ class TestAssignmentWorkbookService:
         if not outcome_by_case:
             raise ValueError("The selected result column has no outcomes to transfer.")
 
-        workbook = load_workbook(BytesIO(ote_bytes))
-        updated_cases: set[int] = set()
+        # OTE workbooks can be large. Loading the full workbook with openpyxl can
+        # expand memory usage dramatically, so update only worksheet XML inside the
+        # XLSX ZIP package. This also preserves workbook formatting and structure.
+        spreadsheet_ns = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
+        relationships_ns = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+        package_rel_ns = "http://schemas.openxmlformats.org/package/2006/relationships"
+        ET.register_namespace("", spreadsheet_ns)
+        ET.register_namespace("r", relationships_ns)
 
-        for sheet in workbook.worksheets:
-            headers = {
-                str(cell.value).strip(): cell.column
-                for cell in sheet[1]
-                if cell.value is not None
+        def qname(name: str) -> str:
+            return f"{{{spreadsheet_ns}}}{name}"
+
+        def column_number(reference: str) -> int | None:
+            match = re.match(r"([A-Z]+)", reference or "")
+            if not match:
+                return None
+            value = 0
+            for char in match.group(1):
+                value = value * 26 + ord(char) - 64
+            return value
+
+        def column_letters(number: int) -> str:
+            letters = ""
+            while number:
+                number, remainder = divmod(number - 1, 26)
+                letters = chr(65 + remainder) + letters
+            return letters
+
+        def load_shared_strings(archive: ZipFile) -> list[str]:
+            try:
+                root = ET.fromstring(archive.read("xl/sharedStrings.xml"))
+            except KeyError:
+                return []
+            values: list[str] = []
+            for item in root.findall(qname("si")):
+                values.append("".join(node.text or "" for node in item.iter(qname("t"))))
+            return values
+
+        def cell_text(cell: ET.Element | None, shared_strings: list[str]) -> str:
+            if cell is None:
+                return ""
+            cell_type = cell.get("t")
+            if cell_type == "inlineStr":
+                return "".join(node.text or "" for node in cell.iter(qname("t")))
+            value = cell.find(qname("v"))
+            raw = value.text if value is not None and value.text is not None else ""
+            if cell_type == "s":
+                try:
+                    return shared_strings[int(raw)]
+                except (ValueError, IndexError):
+                    return ""
+            return raw
+
+        def set_inline_text(cell: ET.Element, value: str) -> None:
+            for child in list(cell):
+                if child.tag in {qname("v"), qname("is"), qname("f")}:
+                    cell.remove(child)
+            cell.set("t", "inlineStr")
+            inline = ET.SubElement(cell, qname("is"))
+            text = ET.SubElement(inline, qname("t"))
+            text.text = value
+
+        def worksheet_paths(archive: ZipFile) -> list[str]:
+            workbook = ET.fromstring(archive.read("xl/workbook.xml"))
+            rels = ET.fromstring(archive.read("xl/_rels/workbook.xml.rels"))
+            targets = {
+                rel.get("Id"): rel.get("Target")
+                for rel in rels.findall(f"{{{package_rel_ns}}}Relationship")
             }
-            case_col = headers.get("TestCaseId")
-            title_col = headers.get("Title")
-            outcome_col = headers.get("Outcome")
-            if not case_col or not outcome_col:
-                continue
+            paths: list[str] = []
+            sheets = workbook.find(qname("sheets"))
+            if sheets is None:
+                return paths
+            for sheet in sheets.findall(qname("sheet")):
+                rel_id = sheet.get(f"{{{relationships_ns}}}id")
+                target = targets.get(rel_id or "")
+                if not target:
+                    continue
+                if target.startswith("/"):
+                    paths.append(target.lstrip("/"))
+                else:
+                    paths.append(posixpath.normpath(posixpath.join("xl", target)))
+            return paths
 
+        def update_sheet(xml_bytes: bytes, shared_strings: list[str], updated_cases: set[int]) -> tuple[bytes, bool]:
+            root = ET.fromstring(xml_bytes)
+            sheet_data = root.find(qname("sheetData"))
+            if sheet_data is None:
+                return xml_bytes, False
+
+            header_map: dict[str, int] = {}
+            rows_xml = sheet_data.findall(qname("row"))
+            header_row = rows_xml[0] if rows_xml else None
+            if header_row is None:
+                return xml_bytes, False
+
+            for cell in header_row.findall(qname("c")):
+                column = column_number(cell.get("r", ""))
+                if column is not None:
+                    header_map[cell_text(cell, shared_strings).strip()] = column
+
+            case_col = header_map.get("TestCaseId")
+            title_col = header_map.get("Title")
+            outcome_col = header_map.get("Outcome")
+            if not case_col or not outcome_col:
+                return xml_bytes, False
+
+            changed = False
             current_case_id: int | None = None
             current_outcome = ""
-            for row_index in range(2, sheet.max_row + 1):
-                raw_case = sheet.cell(row=row_index, column=case_col).value
-                raw_title = sheet.cell(row=row_index, column=title_col).value if title_col else None
+
+            for row in rows_xml[1:]:
+                row_number = int(row.get("r") or 0)
+                cells = {
+                    column_number(cell.get("r", "")): cell
+                    for cell in row.findall(qname("c"))
+                }
+
+                raw_case = cell_text(cells.get(case_col), shared_strings)
+                raw_title = cell_text(cells.get(title_col), shared_strings) if title_col else ""
                 try:
-                    candidate_id = int(raw_case)
+                    candidate_id = int(float(raw_case))
                 except (TypeError, ValueError):
                     candidate_id = None
 
-                # OTE exports use placeholder values on step rows. A genuine case row has
-                # a real TestCaseId plus a real title; subsequent step rows belong to it.
                 is_case_header = candidate_id is not None and (
-                    title_col is None or str(raw_title or "").strip() not in {"", "11"}
+                    title_col is None or raw_title.strip() not in {"", "11"}
                 )
                 if is_case_header:
                     current_case_id = candidate_id
@@ -282,13 +383,62 @@ class TestAssignmentWorkbookService:
                     if current_outcome:
                         updated_cases.add(candidate_id)
 
-                if current_case_id is not None and current_outcome:
-                    sheet.cell(row=row_index, column=outcome_col).value = current_outcome
+                if current_case_id is None or not current_outcome:
+                    continue
 
-        if not updated_cases:
-            raise ValueError("No matching TestCaseId values were found in the selected OTE workbook.")
+                outcome_cell = cells.get(outcome_col)
+                if outcome_cell is None:
+                    outcome_cell = ET.Element(
+                        qname("c"),
+                        {"r": f"{column_letters(outcome_col)}{row_number}"},
+                    )
+                    inserted = False
+                    for index, existing in enumerate(row.findall(qname("c"))):
+                        existing_col = column_number(existing.get("r", "")) or 0
+                        if existing_col > outcome_col:
+                            row.insert(index, outcome_cell)
+                            inserted = True
+                            break
+                    if not inserted:
+                        row.append(outcome_cell)
 
-        output = BytesIO()
-        workbook.save(output)
+                if cell_text(outcome_cell, shared_strings) != current_outcome:
+                    set_inline_text(outcome_cell, current_outcome)
+                    changed = True
+
+            if not changed:
+                return xml_bytes, False
+            return ET.tostring(root, encoding="utf-8", xml_declaration=True), True
+
+        try:
+            source = BytesIO(ote_bytes)
+            output = BytesIO()
+            updated_cases: set[int] = set()
+            with ZipFile(source, "r") as archive:
+                shared_strings = load_shared_strings(archive)
+                sheet_paths = set(worksheet_paths(archive))
+                replacements: dict[str, bytes] = {}
+                for path in sheet_paths:
+                    try:
+                        new_xml, changed = update_sheet(
+                            archive.read(path), shared_strings, updated_cases
+                        )
+                    except KeyError:
+                        continue
+                    if changed:
+                        replacements[path] = new_xml
+
+                if not updated_cases:
+                    raise ValueError(
+                        "No matching TestCaseId values were found in the selected OTE workbook."
+                    )
+
+                with ZipFile(output, "w", compression=ZIP_DEFLATED) as rebuilt:
+                    for info in archive.infolist():
+                        rebuilt.writestr(info, replacements.get(info.filename, archive.read(info.filename)))
+        except BadZipFile as error:
+            raise ValueError("The selected OTE file is not a valid .xlsx workbook.") from error
+
         output.seek(0)
         return output, len(updated_cases)
+
