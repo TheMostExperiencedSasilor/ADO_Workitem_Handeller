@@ -9,6 +9,7 @@
   <link rel="stylesheet" href="main-tabs.css">
   <link rel="stylesheet" href="test-assignment-workbook.css">
   <link rel="stylesheet" href="result-tracker-grid.css">
+  <link rel="stylesheet" href="test-result-charts.css">
 </head>
 <body>
   <header class="app-header">
@@ -65,6 +66,8 @@
                 aria-selected="true" aria-controls="testResultsSummaryPanel">Summary</button>
         <button id="testResultsTrackerTab" class="test-results-subtab" type="button" role="tab"
                 aria-selected="false" aria-controls="testResultsTrackerPanel" tabindex="-1">Result Tracker</button>
+        <button id="testResultsChartsTab" class="test-results-subtab" type="button" role="tab"
+                aria-selected="false" aria-controls="testResultsChartsPanel" tabindex="-1">Charts</button>
       </div>
 
       <div id="testResultsSummaryPanel" class="test-results-subpanel active" role="tabpanel"
@@ -105,6 +108,40 @@
 
       <div id="testResultsTrackerPanel" class="test-results-subpanel" role="tabpanel"
            aria-labelledby="testResultsTrackerTab" hidden></div>
+
+      <div id="testResultsChartsPanel" class="test-results-subpanel" role="tabpanel"
+           aria-labelledby="testResultsChartsTab" hidden>
+        <div class="charts-heading-row">
+          <div>
+            <h2>Test Result Charts</h2>
+            <p>Visualize the current suite by outcome and assigned tester.</p>
+          </div>
+          <span class="mini-status">Suite analytics</span>
+        </div>
+        <form id="testChartsForm">
+          <label for="testChartsUrl">Azure DevOps Test Plan URL</label>
+          <input id="testChartsUrl" type="text"
+                 placeholder="https://dev.azure.com/.../_testPlans/charts?planId=83602&amp;suiteId=141923" required>
+          <button id="loadTestChartsButton" type="submit">Load Charts</button>
+        </form>
+        <p id="testChartsStatus" class="mini-status" role="status" aria-live="polite">Paste a Define, Execute or Charts URL to visualize this suite.</p>
+        <div id="testChartsContent" class="test-charts-content" hidden>
+          <div class="chart-card">
+            <div class="chart-card-heading">
+              <h3>Outcome distribution</h3>
+              <span id="outcomeChartTotal" class="chart-note"></span>
+            </div>
+            <div id="outcomeChart" class="bar-chart-list"></div>
+          </div>
+          <div class="chart-card">
+            <div class="chart-card-heading">
+              <h3>Results by tester</h3>
+              <span class="chart-note">Assigned test-point tester</span>
+            </div>
+            <div id="testerChart" class="stacked-chart-list"></div>
+          </div>
+        </div>
+      </div>
     </section>
 
     <section class="panel work-type-panel">
@@ -273,5 +310,6 @@
   <script src="export-results.js"></script>
   <script src="test-assignment-workbook.js"></script>
   <script src="result-tracker-grid.js"></script>
+  <script src="test-result-charts.js"></script>
 </body>
 </html>
