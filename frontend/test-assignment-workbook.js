@@ -40,6 +40,7 @@
       <button id="openAssignmentJson" type="button" class="secondary-button">Open Work</button>
       <button id="exportAssignmentWorkbook" type="button" class="secondary-button" disabled>Export Excel</button>
       <button id="transferAssignmentToOte" type="button" class="secondary-button" disabled>Transfer to OTE</button>
+      <button id="clearAllAssignmentResults" type="button" class="danger-button" disabled>Clear all results</button>
       <input id="assignmentJsonFile" type="file" accept="application/json,.json" hidden>
       <input id="assignmentOteFile" type="file" accept="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.xlsx" hidden>
     </div>
@@ -52,7 +53,10 @@
           <thead>
             <tr>
               <th>ID</th><th>Title</th><th>Product Area</th><th>Automation Script Name</th>
-              <th>Round 1 results</th><th>Round 2 results</th><th>Single run results</th><th>Manual run</th>
+              <th><div class="result-header">Round 1 results<button type="button" class="clear-result-column" data-result-key="round1Results" data-result-label="Round 1 results" disabled>Clear</button></div></th>
+              <th><div class="result-header">Round 2 results<button type="button" class="clear-result-column" data-result-key="round2Results" data-result-label="Round 2 results" disabled>Clear</button></div></th>
+              <th><div class="result-header">Single run results<button type="button" class="clear-result-column" data-result-key="singleRunResults" data-result-label="Single run results" disabled>Clear</button></div></th>
+              <th><div class="result-header">Manual run<button type="button" class="clear-result-column" data-result-key="manualRun" data-result-label="Manual run" disabled>Clear</button></div></th>
               <th>Comment</th><th>Solution</th><th>Defects</th>
             </tr>
           </thead>
@@ -88,6 +92,8 @@
   const openButton = section.querySelector('#openAssignmentJson');
   const exportButton = section.querySelector('#exportAssignmentWorkbook');
   const transferButton = section.querySelector('#transferAssignmentToOte');
+  const clearAllResultsButton = section.querySelector('#clearAllAssignmentResults');
+  const clearResultButtons = [...section.querySelectorAll('.clear-result-column')];
   const jsonFileInput = section.querySelector('#assignmentJsonFile');
   const oteFileInput = section.querySelector('#assignmentOteFile');
   const transferDialog = section.querySelector('#oteTransferDialog');
@@ -109,6 +115,24 @@
     saveButton.disabled = !enabled;
     exportButton.disabled = !enabled;
     transferButton.disabled = !enabled;
+    clearAllResultsButton.disabled = !enabled;
+    clearAllResultsButton.addEventListener('click', () => {
+    if (!trackedRows.length) return;
+
+    const confirmed = window.confirm(
+      'Clear Round 1, Round 2, Single run and Manual run results for all loaded test cases?'
+    );
+    if (!confirmed) return;
+
+    const resultKeys = ['round1Results', 'round2Results', 'singleRunResults', 'manualRun'];
+    for (const row of trackedRows) {
+      for (const key of resultKeys) row[key] = '';
+    }
+    renderRows();
+    setStatus('All result columns cleared. Comments, solutions and defects were kept.');
+  });
+
+  clearResultButtons.forEach((button) => { button.disabled = !enabled; });
   }
 
   function makeResultSelect(row, key) {
@@ -248,6 +272,22 @@
     } finally {
       previewButton.disabled = false;
     }
+  });
+
+  clearResultButtons.forEach((button) => {
+    button.addEventListener('click', () => {
+      if (!trackedRows.length) return;
+      const key = button.dataset.resultKey;
+      const label = button.dataset.resultLabel || 'this result column';
+      if (!key) return;
+
+      const confirmed = window.confirm(`Clear all values in "${label}"?`);
+      if (!confirmed) return;
+
+      for (const row of trackedRows) row[key] = '';
+      renderRows();
+      setStatus(`${label} cleared for all loaded test cases.`);
+    });
   });
 
   saveButton.addEventListener('click', () => {
