@@ -40,6 +40,7 @@
       <button id="openAssignmentJson" type="button" class="secondary-button">Open Work</button>
       <button id="exportAssignmentWorkbook" type="button" class="secondary-button" disabled>Export Excel</button>
       <button id="transferAssignmentToOte" type="button" class="secondary-button" disabled>Transfer to OTE</button>
+      <button id="clearAllAssignmentResults" type="button" class="danger-button" disabled>Clear all results</button>
       <input id="assignmentJsonFile" type="file" accept="application/json,.json" hidden>
       <input id="assignmentOteFile" type="file" accept="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.xlsx" hidden>
     </div>
@@ -91,6 +92,7 @@
   const openButton = section.querySelector('#openAssignmentJson');
   const exportButton = section.querySelector('#exportAssignmentWorkbook');
   const transferButton = section.querySelector('#transferAssignmentToOte');
+  const clearAllResultsButton = section.querySelector('#clearAllAssignmentResults');
   const clearResultButtons = [...section.querySelectorAll('.clear-result-column')];
   const jsonFileInput = section.querySelector('#assignmentJsonFile');
   const oteFileInput = section.querySelector('#assignmentOteFile');
@@ -113,7 +115,24 @@
     saveButton.disabled = !enabled;
     exportButton.disabled = !enabled;
     transferButton.disabled = !enabled;
-    clearResultButtons.forEach((button) => { button.disabled = !enabled; });
+    clearAllResultsButton.disabled = !enabled;
+    clearAllResultsButton.addEventListener('click', () => {
+    if (!trackedRows.length) return;
+
+    const confirmed = window.confirm(
+      'Clear Round 1, Round 2, Single run and Manual run results for all loaded test cases?'
+    );
+    if (!confirmed) return;
+
+    const resultKeys = ['round1Results', 'round2Results', 'singleRunResults', 'manualRun'];
+    for (const row of trackedRows) {
+      for (const key of resultKeys) row[key] = '';
+    }
+    renderRows();
+    setStatus('All result columns cleared. Comments, solutions and defects were kept.');
+  });
+
+  clearResultButtons.forEach((button) => { button.disabled = !enabled; });
   }
 
   function makeResultSelect(row, key) {
