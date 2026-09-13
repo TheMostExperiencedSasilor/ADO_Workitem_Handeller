@@ -71,7 +71,7 @@
       </div>
     </div>
 
-    <dialog id="adoTestRunDialog" class="ote-transfer-dialog ado-run-dialog">
+    <dialog id="adoTestRunDialog" class="ado-run-dialog">
       <form method="dialog">
         <h3>Create Azure DevOps Test Run</h3>
         <p>Choose one tracker result column. Only rows containing a result will be included; Azure DevOps test-point IDs are validated again before anything is written.</p>
