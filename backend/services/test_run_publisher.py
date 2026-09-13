@@ -113,12 +113,8 @@ class TestRunPublisher:
 
         # Re-read the suite before writing so stale or manipulated point IDs cannot
         # publish outside the currently selected test plan/suite.
-        current_points = self.client.read_test_points(plan_id, suite_id)
-        current_by_id = {
-            int(point["testPointId"]): point
-            for point in current_points
-            if point.get("testPointId") is not None
-        }
+        current_points = self.client.read_test_point_mappings(plan_id, suite_id)
+        current_by_id = {point["testPointId"]: point for point in current_points}
         for point_id, requested in requested_by_point.items():
             current = current_by_id.get(point_id)
             if current is None:
