@@ -26,6 +26,10 @@
     columnWidths: [145, 560, 155, 230, 240],
   };
 
+  const plannerTab = document.querySelector('#testResultsPlannerTab');
+  const plannerPanel = document.querySelector('#testResultsPlannerPanel');
+  if (!plannerTab || !plannerPanel) return;
+
   const normalize = (value) => String(value ?? '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
 
   const requestJson = async (path, options = {}) => {
@@ -34,9 +38,7 @@
       ...options,
     });
     const data = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      throw new Error(data.error || data.message || `Request failed: ${response.status}`);
-    }
+    if (!response.ok) throw new Error(data.error || data.message || `Request failed: ${response.status}`);
     return data;
   };
 
@@ -62,12 +64,11 @@
   };
 
   const productAreaFromFields = (fields) => {
-    const aliases = new Set(['productarea']);
     for (const [referenceName, value] of Object.entries(fields || {})) {
       const tail = referenceName.split('.').pop() || referenceName;
       const normalizedTail = normalize(tail);
       const normalizedFull = normalize(referenceName);
-      if (!aliases.has(normalizedTail) && ![...aliases].some((alias) => normalizedFull.includes(alias))) continue;
+      if (normalizedTail !== 'productarea' && !normalizedFull.includes('productarea')) continue;
       if (value == null) return '';
       if (typeof value === 'object') return String(value.displayName || value.name || value.value || '');
       return String(value);
@@ -103,13 +104,8 @@
     rows.forEach((row) => {
       const methodName = testMethodName(row.testCaseId);
       if (!methodName || methodName === 'VSTS') return;
-      if (!unique.has(methodName.toLowerCase())) {
-        unique.set(methodName.toLowerCase(), {
-          ...row,
-          methodName,
-          sample: isSampleTitle(row.title),
-        });
-      }
+      const key = methodName.toLowerCase();
+      if (!unique.has(key)) unique.set(key, { ...row, methodName, sample: isSampleTitle(row.title) });
     });
 
     const items = [...unique.values()];
@@ -121,11 +117,8 @@
       '    <Rule Match="All">',
     ];
 
-    if (CONFIG.solutionValue) {
-      lines.push(`      <Property Name="Solution" Value="${escapeXmlValue(CONFIG.solutionValue)}" />`);
-    } else {
-      lines.push('      <Property Name="Solution" />');
-    }
+    if (CONFIG.solutionValue) lines.push(`      <Property Name="Solution" Value="${escapeXmlValue(CONFIG.solutionValue)}" />`);
+    else lines.push('      <Property Name="Solution" />');
 
     lines.push(
       '      <Rule Match="Any">',
@@ -159,154 +152,194 @@
     };
   };
 
-  const buildPanel = () => {
-    const tab = document.querySelector('#testResultsSummaryTab');
-    const panel = document.querySelector('#testResultsSummaryPanel');
-    if (!tab || !panel) return false;
+  plannerPanel.innerHTML = `
+    <div class="test-planner-heading">
+      <div>
+        <h2>Test Planner</h2>
+        <p>Review Execute-page planning data, select a test subset, and generate a Visual Studio UFT playlist.</p>
+      </div>
+      <span class="mini-status">Planning workspace</span>
+    </div>
 
-    tab.textContent = 'Test Planner';
-    panel.innerHTML = `
-      <div class="test-planner-heading">
+    <form id="plannerSuiteForm" class="planner-suite-form">
+      <label for="plannerTestPlanUrl">Azure DevOps Test Plan URL</label>
+      <input id="plannerTestPlanUrl" type="text"
+             placeholder="https://dev.azure.com/.../_testPlans/execute?planId=83602&amp;suiteId=106867" required>
+      <button id="plannerLoadSuiteButton" type="submit">Load Test Suite</button>
+    </form>
+    <p id="plannerSuiteStatus" class="mini-status" role="status" aria-live="polite">The suite URL is shared with Summary, Result Tracker, and Charts.</p>
+
+    <div id="plannerResults" hidden>
+      <div id="plannerSummary" class="test-suite-summary"></div>
+
+      <div class="planner-action-row">
+        <button id="plannerSelectModeButton" type="button" class="secondary-button" aria-pressed="false">Select Test Cases</button>
+        <button id="plannerSelectAllButton" type="button" class="secondary-button" disabled>Select All</button>
+        <button id="plannerUnselectAllButton" type="button" class="secondary-button" disabled>Unselect All</button>
+        <button id="plannerGeneratePlaylistButton" type="button" disabled>Generate UFT Playlist</button>
+        <span id="plannerSelectedCount" class="planner-selected-count">0 selected</span>
+      </div>
+
+      <div id="playlistProgressPanel" class="playlist-progress-panel" hidden>
+        <div class="playlist-progress-heading">
+          <strong>Generating UFT playlist</strong>
+          <span id="playlistProgressText">0%</span>
+        </div>
+        <progress id="playlistProgress" max="100" value="0"></progress>
+      </div>
+
+      <div id="playlistReadyPanel" class="playlist-ready-panel" hidden>
+        <span id="playlistReadyMessage"></span>
+        <button id="openPlaylistPreviewButton" type="button" class="secondary-button">Open Preview</button>
+      </div>
+
+      <div class="planner-table-tools">
+        <span id="plannerFilterStatusText" class="mini-status" role="status"></span>
         <div>
-          <h2>Test Planner</h2>
-          <p>Load an Azure DevOps test suite, review the Execute-page data, select test cases, and generate a UFT playlist.</p>
+          <button id="plannerClearFiltersButton" type="button" class="secondary-button">Clear Filters</button>
+          <button id="plannerResetSizesButton" type="button" class="secondary-button">Reset Table Size</button>
         </div>
-        <span class="mini-status">Planning workspace</span>
       </div>
 
-      <form id="plannerSuiteForm" class="planner-suite-form">
-        <label for="plannerTestPlanUrl">Azure DevOps Test Plan URL</label>
-        <input id="plannerTestPlanUrl" type="text"
-               placeholder="https://dev.azure.com/.../_testPlans/execute?planId=83602&amp;suiteId=106867 (Define, Execute or Charts)" required>
-        <button id="plannerLoadSuiteButton" type="submit">Load Test Suite</button>
-      </form>
-      <p id="plannerSuiteStatus" class="mini-status" role="status" aria-live="polite">Paste a suite URL to load planning data from ADO.</p>
+      <p class="mini-status planner-hint">Filters sit directly beneath each header. Select All / Unselect All act on the currently filtered rows.</p>
 
-      <div id="plannerResults" hidden>
-        <div id="plannerSummary" class="test-suite-summary"></div>
+      <div class="test-suite-table-wrap planner-table-wrap" tabindex="0" role="region" aria-label="Test planner table">
+        <table id="plannerTable" class="test-suite-table planner-table">
+          <caption>Current Execute-page planning data</caption>
+          <colgroup id="plannerColumns"><col class="planner-selection-col"><col><col><col><col><col></colgroup>
+          <thead>
+            <tr class="planner-header-row">
+              <th class="planner-selection-cell" scope="col" aria-label="Select"></th>
+              <th scope="col" data-planner-column="0" data-label="Test Case ID">Test Case ID</th>
+              <th scope="col" data-planner-column="1" data-label="Title">Title</th>
+              <th scope="col" data-planner-column="2" data-label="Status">Status</th>
+              <th scope="col" data-planner-column="3" data-label="Product Area">Product Area</th>
+              <th scope="col" data-planner-column="4" data-label="Current Tester">Current Tester</th>
+            </tr>
+            <tr class="planner-filter-row">
+              <th class="planner-selection-cell"></th>
+              <th><input id="plannerFilterId" type="search" aria-label="Filter Test Case ID" placeholder="Filter ID"></th>
+              <th><input id="plannerFilterTitle" type="search" aria-label="Filter Title" placeholder="Filter title"></th>
+              <th><select id="plannerFilterStatus" aria-label="Filter Status"><option value="">All statuses</option><option>Passed</option><option>Active</option><option>Failed</option></select></th>
+              <th><input id="plannerFilterProductArea" type="search" aria-label="Filter Product Area" placeholder="Filter product area"></th>
+              <th><input id="plannerFilterTester" type="search" aria-label="Filter Current Tester" placeholder="Filter tester"></th>
+            </tr>
+          </thead>
+          <tbody id="plannerRows"></tbody>
+        </table>
+      </div>
+    </div>
 
-        <div class="planner-action-row">
-          <button id="plannerSelectModeButton" type="button" class="secondary-button" aria-pressed="false">Select Test Cases</button>
-          <button id="plannerSelectAllButton" type="button" class="secondary-button" disabled>Select All</button>
-          <button id="plannerUnselectAllButton" type="button" class="secondary-button" disabled>Unselect All</button>
-          <button id="plannerGeneratePlaylistButton" type="button" disabled>Generate UFT Playlist</button>
-          <span id="plannerSelectedCount" class="planner-selected-count">0 selected</span>
-        </div>
-
-        <div id="playlistProgressPanel" class="playlist-progress-panel" hidden>
-          <div class="playlist-progress-heading">
-            <strong>Generating UFT playlist</strong>
-            <span id="playlistProgressText">0%</span>
-          </div>
-          <progress id="playlistProgress" max="100" value="0"></progress>
-        </div>
-
-        <div id="playlistReadyPanel" class="playlist-ready-panel" hidden>
-          <span id="playlistReadyMessage"></span>
-          <button id="openPlaylistPreviewButton" type="button" class="secondary-button">Open Preview</button>
-        </div>
-
-        <div class="planner-table-tools">
-          <span id="plannerFilterStatus" class="mini-status" role="status"></span>
+    <dialog id="playlistPreviewDialog" class="playlist-preview-dialog">
+      <form method="dialog" class="playlist-preview-card">
+        <div class="playlist-preview-heading">
           <div>
-            <button id="plannerClearFiltersButton" type="button" class="secondary-button">Clear Filters</button>
-            <button id="plannerResetSizesButton" type="button" class="secondary-button">Reset Table Size</button>
+            <h3>UFT Playlist Preview</h3>
+            <p id="playlistPreviewMeta" class="mini-status"></p>
           </div>
+          <button type="submit" value="cancel" class="secondary-button">Close</button>
         </div>
-
-        <p class="mini-status planner-hint">Filters are directly beneath each header. Drag header edges to resize columns and row bottoms to resize rows. Select All / Unselect All apply to the currently filtered rows.</p>
-
-        <div class="test-suite-table-wrap planner-table-wrap" tabindex="0" role="region" aria-label="Test planner table">
-          <table id="plannerTable" class="test-suite-table planner-table">
-            <caption>Current Execute-page test planning data</caption>
-            <colgroup id="plannerColumns">
-              <col class="planner-selection-col"><col><col><col><col><col>
-            </colgroup>
-            <thead>
-              <tr class="planner-header-row">
-                <th class="planner-selection-cell" scope="col" aria-label="Select"></th>
-                <th scope="col" data-planner-column="0" data-label="Test Case ID">Test Case ID</th>
-                <th scope="col" data-planner-column="1" data-label="Title">Title</th>
-                <th scope="col" data-planner-column="2" data-label="Status">Status</th>
-                <th scope="col" data-planner-column="3" data-label="Product Area">Product Area</th>
-                <th scope="col" data-planner-column="4" data-label="Current Tester">Current Tester</th>
-              </tr>
-              <tr class="planner-filter-row">
-                <th class="planner-selection-cell"></th>
-                <th><input id="plannerFilterId" type="search" aria-label="Filter Test Case ID" placeholder="Filter ID"></th>
-                <th><input id="plannerFilterTitle" type="search" aria-label="Filter Title" placeholder="Filter title"></th>
-                <th><select id="plannerFilterStatus" aria-label="Filter Status"><option value="">All statuses</option><option>Passed</option><option>Active</option><option>Failed</option></select></th>
-                <th><input id="plannerFilterProductArea" type="search" aria-label="Filter Product Area" placeholder="Filter product area"></th>
-                <th><input id="plannerFilterTester" type="search" aria-label="Filter Current Tester" placeholder="Filter tester"></th>
-              </tr>
-            </thead>
-            <tbody id="plannerRows"></tbody>
-          </table>
+        <pre id="playlistPreviewText" class="playlist-preview-text" tabindex="0"></pre>
+        <div class="playlist-preview-actions">
+          <button id="exportPlaylistButton" type="button">Export Playlist</button>
+          <span id="playlistExportStatus" class="mini-status" role="status" aria-live="polite"></span>
         </div>
-      </div>
-
-      <dialog id="playlistPreviewDialog" class="playlist-preview-dialog">
-        <form method="dialog" class="playlist-preview-card">
-          <div class="playlist-preview-heading">
-            <div>
-              <h3>UFT Playlist Preview</h3>
-              <p id="playlistPreviewMeta" class="mini-status"></p>
-            </div>
-            <button id="closePlaylistPreviewButton" type="submit" value="cancel" class="secondary-button">Close</button>
-          </div>
-          <pre id="playlistPreviewText" class="playlist-preview-text" tabindex="0"></pre>
-          <div class="playlist-preview-actions">
-            <button id="exportPlaylistButton" type="button">Export Playlist</button>
-            <span id="playlistExportStatus" class="mini-status" role="status" aria-live="polite"></span>
-          </div>
-        </form>
-      </dialog>
-    `;
-    return true;
-  };
-
-  if (!buildPanel()) return;
+      </form>
+    </dialog>
+  `;
 
   const elements = {
-    form: document.querySelector('#plannerSuiteForm'),
-    url: document.querySelector('#plannerTestPlanUrl'),
-    load: document.querySelector('#plannerLoadSuiteButton'),
-    status: document.querySelector('#plannerSuiteStatus'),
-    results: document.querySelector('#plannerResults'),
-    summary: document.querySelector('#plannerSummary'),
-    table: document.querySelector('#plannerTable'),
-    columns: document.querySelector('#plannerColumns'),
-    body: document.querySelector('#plannerRows'),
-    filterStatus: document.querySelector('#plannerFilterStatus'),
-    selectedCount: document.querySelector('#plannerSelectedCount'),
-    selectMode: document.querySelector('#plannerSelectModeButton'),
-    selectAll: document.querySelector('#plannerSelectAllButton'),
-    unselectAll: document.querySelector('#plannerUnselectAllButton'),
-    generate: document.querySelector('#plannerGeneratePlaylistButton'),
-    progressPanel: document.querySelector('#playlistProgressPanel'),
-    progress: document.querySelector('#playlistProgress'),
-    progressText: document.querySelector('#playlistProgressText'),
-    readyPanel: document.querySelector('#playlistReadyPanel'),
-    readyMessage: document.querySelector('#playlistReadyMessage'),
-    openPreview: document.querySelector('#openPlaylistPreviewButton'),
-    preview: document.querySelector('#playlistPreviewDialog'),
-    previewText: document.querySelector('#playlistPreviewText'),
-    previewMeta: document.querySelector('#playlistPreviewMeta'),
-    exportButton: document.querySelector('#exportPlaylistButton'),
-    exportStatus: document.querySelector('#playlistExportStatus'),
+    form: plannerPanel.querySelector('#plannerSuiteForm'),
+    url: plannerPanel.querySelector('#plannerTestPlanUrl'),
+    load: plannerPanel.querySelector('#plannerLoadSuiteButton'),
+    status: plannerPanel.querySelector('#plannerSuiteStatus'),
+    results: plannerPanel.querySelector('#plannerResults'),
+    summary: plannerPanel.querySelector('#plannerSummary'),
+    table: plannerPanel.querySelector('#plannerTable'),
+    columns: plannerPanel.querySelector('#plannerColumns'),
+    body: plannerPanel.querySelector('#plannerRows'),
+    filterStatusText: plannerPanel.querySelector('#plannerFilterStatusText'),
+    selectedCount: plannerPanel.querySelector('#plannerSelectedCount'),
+    selectMode: plannerPanel.querySelector('#plannerSelectModeButton'),
+    selectAll: plannerPanel.querySelector('#plannerSelectAllButton'),
+    unselectAll: plannerPanel.querySelector('#plannerUnselectAllButton'),
+    generate: plannerPanel.querySelector('#plannerGeneratePlaylistButton'),
+    progressPanel: plannerPanel.querySelector('#playlistProgressPanel'),
+    progress: plannerPanel.querySelector('#playlistProgress'),
+    progressText: plannerPanel.querySelector('#playlistProgressText'),
+    readyPanel: plannerPanel.querySelector('#playlistReadyPanel'),
+    readyMessage: plannerPanel.querySelector('#playlistReadyMessage'),
+    openPreview: plannerPanel.querySelector('#openPlaylistPreviewButton'),
+    preview: plannerPanel.querySelector('#playlistPreviewDialog'),
+    previewText: plannerPanel.querySelector('#playlistPreviewText'),
+    previewMeta: plannerPanel.querySelector('#playlistPreviewMeta'),
+    exportButton: plannerPanel.querySelector('#exportPlaylistButton'),
+    exportStatus: plannerPanel.querySelector('#playlistExportStatus'),
   };
 
   const filters = {
-    id: document.querySelector('#plannerFilterId'),
-    title: document.querySelector('#plannerFilterTitle'),
-    status: document.querySelector('#plannerFilterStatus'),
-    productArea: document.querySelector('#plannerFilterProductArea'),
-    tester: document.querySelector('#plannerFilterTester'),
+    id: plannerPanel.querySelector('#plannerFilterId'),
+    title: plannerPanel.querySelector('#plannerFilterTitle'),
+    status: plannerPanel.querySelector('#plannerFilterStatus'),
+    productArea: plannerPanel.querySelector('#plannerFilterProductArea'),
+    tester: plannerPanel.querySelector('#plannerFilterTester'),
   };
+
+  const normalTabs = [
+    ['#testResultsSummaryTab', '#testResultsSummaryPanel'],
+    ['#testResultsTrackerTab', '#testResultsTrackerPanel'],
+    ['#testResultsChartsTab', '#testResultsChartsPanel'],
+  ];
+
+  const activatePlanner = () => {
+    for (const [tabSelector, panelSelector] of normalTabs) {
+      const tab = document.querySelector(tabSelector);
+      const panel = document.querySelector(panelSelector);
+      if (tab) {
+        tab.classList.remove('active');
+        tab.setAttribute('aria-selected', 'false');
+        tab.tabIndex = -1;
+      }
+      if (panel) {
+        panel.hidden = true;
+        panel.classList.remove('active');
+      }
+    }
+    plannerTab.classList.add('active');
+    plannerTab.setAttribute('aria-selected', 'true');
+    plannerTab.tabIndex = 0;
+    plannerPanel.hidden = false;
+    plannerPanel.classList.add('active');
+  };
+
+  plannerTab.addEventListener('click', activatePlanner);
+  for (const [tabSelector] of normalTabs) {
+    document.querySelector(tabSelector)?.addEventListener('click', () => {
+      plannerTab.classList.remove('active');
+      plannerTab.setAttribute('aria-selected', 'false');
+      plannerTab.tabIndex = -1;
+      plannerPanel.hidden = true;
+      plannerPanel.classList.remove('active');
+    });
+  }
+
+  const primaryUrl = document.querySelector('#testPlanUrl');
+  if (primaryUrl) {
+    if (primaryUrl.value.trim()) elements.url.value = primaryUrl.value.trim();
+    primaryUrl.addEventListener('input', () => {
+      if (elements.url.value !== primaryUrl.value) elements.url.value = primaryUrl.value;
+    });
+    elements.url.addEventListener('input', () => {
+      if (primaryUrl.value === elements.url.value) return;
+      primaryUrl.value = elements.url.value;
+      primaryUrl.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+  }
 
   const setStatus = (message, error = false) => {
     elements.status.textContent = message;
     elements.status.classList.toggle('error', error);
+    elements.status.classList.toggle('ok', !error && Boolean(message));
   };
 
   const applyColumnWidths = () => {
@@ -352,11 +385,10 @@
     return handle;
   };
 
-  document.querySelectorAll('[data-planner-column]').forEach((header) => {
+  plannerPanel.querySelectorAll('[data-planner-column]').forEach((header) => {
     const index = Number(header.dataset.plannerColumn);
     header.appendChild(makeResizeHandle(
-      'column',
-      `Resize ${header.dataset.label} column`,
+      'column', `Resize ${header.dataset.label} column`,
       () => state.columnWidths[index],
       (size) => { state.columnWidths[index] = size; applyColumnWidths(); },
       80,
@@ -383,17 +415,11 @@
       && includes(row.tester || 'Unassigned', filters.tester.value);
   };
 
-  const syncDuplicateCheckboxes = (testCaseId, checked) => {
-    elements.body.querySelectorAll(`input[data-test-case-id="${String(testCaseId).replace(/"/g, '')}"]`).forEach((box) => {
-      box.checked = checked;
-    });
-  };
-
   const renderRows = () => {
     state.visibleRows = state.rows.filter(rowMatchesFilters);
     const fragment = document.createDocumentFragment();
 
-    state.visibleRows.forEach((row, visibleIndex) => {
+    state.visibleRows.forEach((row) => {
       const tr = document.createElement('tr');
       const rowKey = `${row.testCaseId}:${row.pointIndex}`;
 
@@ -402,14 +428,13 @@
       const checkbox = document.createElement('input');
       checkbox.type = 'checkbox';
       checkbox.className = 'planner-case-checkbox';
-      checkbox.dataset.testCaseId = row.testCaseId;
       checkbox.setAttribute('aria-label', `Select test case ${row.testCaseId}`);
       checkbox.checked = state.selectedIds.has(String(row.testCaseId));
       checkbox.addEventListener('change', () => {
         const id = String(row.testCaseId);
-        if (checkbox.checked) state.selectedIds.add(id); else state.selectedIds.delete(id);
-        syncDuplicateCheckboxes(id, checkbox.checked);
-        updateSelectionControls();
+        if (checkbox.checked) state.selectedIds.add(id);
+        else state.selectedIds.delete(id);
+        renderRows();
       });
       selectionCell.appendChild(checkbox);
       tr.appendChild(selectionCell);
@@ -422,28 +447,22 @@
           badge.className = `planner-status ${row.status.toLowerCase()}`;
           badge.textContent = row.status;
           td.appendChild(badge);
-        } else {
-          td.textContent = value;
-        }
+        } else td.textContent = value;
         tr.appendChild(td);
       });
 
       if (state.rowHeights.has(rowKey)) tr.style.height = `${state.rowHeights.get(rowKey)}px`;
-      const firstDataCell = tr.children[1];
-      firstDataCell.appendChild(makeResizeHandle(
-        'row',
-        `Resize test case ${row.testCaseId} row`,
+      tr.children[1].appendChild(makeResizeHandle(
+        'row', `Resize test case ${row.testCaseId} row`,
         () => tr.getBoundingClientRect().height,
         (size) => { tr.style.height = `${size}px`; state.rowHeights.set(rowKey, size); },
         40,
       ));
-
-      tr.dataset.visibleIndex = visibleIndex;
       fragment.appendChild(tr);
     });
 
     elements.body.replaceChildren(fragment);
-    elements.filterStatus.textContent = state.visibleRows.length
+    elements.filterStatusText.textContent = state.visibleRows.length
       ? `Showing ${state.visibleRows.length} of ${state.rows.length} rows.`
       : 'No test cases match the filters.';
     updateSelectionControls();
@@ -458,52 +477,47 @@
     const ids = [...new Set(points.map((point) => Number(point.testCaseId)).filter(Number.isFinite))];
     const byId = new Map();
     for (let start = 0; start < ids.length; start += 200) {
-      const batch = ids.slice(start, start + 200);
       const data = await requestJson('/api/work-items/read', {
         method: 'POST',
-        body: JSON.stringify({ ids: batch }),
+        body: JSON.stringify({ ids: ids.slice(start, start + 200) }),
       });
-      (data.workItems || []).forEach((item) => {
+      for (const item of data.workItems || []) {
         const fields = item.fields || {};
         byId.set(String(item.id), {
           title: String(fields['System.Title'] || ''),
           productArea: productAreaFromFields(fields),
         });
-      });
+      }
     }
     return byId;
   };
 
   const renderSummary = () => {
-    const uniqueIds = new Set(state.rows.map((row) => String(row.testCaseId)));
     const uniqueStatus = new Map();
-    state.rows.forEach((row) => {
+    for (const row of state.rows) {
       const key = String(row.testCaseId);
       const existing = uniqueStatus.get(key);
-      if (!existing || row.status === 'Failed' || (row.status === 'Passed' && existing === 'Active')) {
-        uniqueStatus.set(key, row.status);
-      }
-    });
+      if (!existing || row.status === 'Failed' || (row.status === 'Passed' && existing === 'Active')) uniqueStatus.set(key, row.status);
+    }
     const values = [
-      ['Test Plan', state.planId],
-      ['Suite', state.suiteId],
-      ['Test Cases', uniqueIds.size],
+      ['Test Plan', state.planId], ['Suite', state.suiteId], ['Test Cases', uniqueStatus.size],
       ['Passed', [...uniqueStatus.values()].filter((value) => value === 'Passed').length],
       ['Active', [...uniqueStatus.values()].filter((value) => value === 'Active').length],
       ['Failed', [...uniqueStatus.values()].filter((value) => value === 'Failed').length],
     ];
     const fragment = document.createDocumentFragment();
-    values.forEach(([label, value]) => {
+    for (const [label, value] of values) {
       const span = document.createElement('span');
       span.textContent = `${label}: ${value}`;
       fragment.appendChild(span);
-    });
+    }
     elements.summary.replaceChildren(fragment);
   };
 
   elements.form.addEventListener('submit', async (event) => {
     event.preventDefault();
     if (elements.load.disabled) return;
+    if (!elements.url.value.trim() && primaryUrl?.value.trim()) elements.url.value = primaryUrl.value.trim();
 
     elements.load.disabled = true;
     elements.results.hidden = true;
@@ -520,8 +534,7 @@
 
     try {
       const suite = await requestJson('/api/test-plans/read-suite', {
-        method: 'POST',
-        body: JSON.stringify({ url: elements.url.value.trim() }),
+        method: 'POST', body: JSON.stringify({ url: elements.url.value.trim() }),
       });
       if (!Array.isArray(suite.testPoints)) throw new Error('Invalid response from the backend.');
 
@@ -555,11 +568,10 @@
     control.addEventListener(control.tagName === 'SELECT' ? 'change' : 'input', renderRows);
   });
 
-  document.querySelector('#plannerClearFiltersButton').addEventListener('click', clearFilters);
-  document.querySelector('#plannerResetSizesButton').addEventListener('click', () => {
+  plannerPanel.querySelector('#plannerClearFiltersButton').addEventListener('click', clearFilters);
+  plannerPanel.querySelector('#plannerResetSizesButton').addEventListener('click', () => {
     state.columnWidths = [145, 560, 155, 230, 240];
     state.rowHeights.clear();
-    applyColumnWidths();
     renderRows();
   });
 
@@ -578,17 +590,17 @@
     renderRows();
   });
 
-  const sleepFrame = () => new Promise((resolve) => requestAnimationFrame(() => resolve()));
+  const sleepFrame = () => new Promise((resolve) => requestAnimationFrame(resolve));
 
   elements.generate.addEventListener('click', async () => {
     const selectedRows = [];
     const added = new Set();
-    state.rows.forEach((row) => {
+    for (const row of state.rows) {
       const id = String(row.testCaseId);
-      if (!state.selectedIds.has(id) || added.has(id)) return;
+      if (!state.selectedIds.has(id) || added.has(id)) continue;
       added.add(id);
       selectedRows.push(row);
-    });
+    }
     if (!selectedRows.length) return;
 
     elements.generate.disabled = true;
@@ -612,8 +624,7 @@
       elements.progress.value = 100;
       elements.progressText.textContent = '100%';
       await sleepFrame();
-
-      elements.readyMessage.textContent = `Playlist generated: ${generated.total} test(s) — ${generated.normal} normal, ${generated.samples} sample mode. Open Preview to review before export.`;
+      elements.readyMessage.textContent = `Playlist generated: ${generated.total} test(s) — ${generated.normal} normal, ${generated.samples} sample mode. Open Preview before export.`;
       elements.readyPanel.hidden = false;
       setStatus('UFT playlist generated successfully.');
     } catch (error) {
@@ -623,25 +634,19 @@
     }
   });
 
-  const openPreview = () => {
+  elements.openPreview.addEventListener('click', () => {
     if (!state.generatedPlaylist || !state.generatedMeta) return;
     elements.previewText.textContent = state.generatedPlaylist;
     elements.previewMeta.textContent = `${state.generatedMeta.total} test(s) · ${state.generatedMeta.normal} ProductTestCase · ${state.generatedMeta.samples} ClassSampleTest`;
     elements.exportStatus.textContent = '';
-    if (typeof elements.preview.showModal === 'function') {
-      elements.preview.showModal();
-    } else {
-      elements.preview.setAttribute('open', '');
-    }
-  };
-
-  elements.openPreview.addEventListener('click', openPreview);
+    if (typeof elements.preview.showModal === 'function') elements.preview.showModal();
+    else elements.preview.setAttribute('open', '');
+  });
 
   elements.exportButton.addEventListener('click', async () => {
     if (!state.generatedPlaylist) return;
     const blob = new Blob([`\uFEFF${state.generatedPlaylist}`], { type: 'application/xml;charset=utf-8' });
     elements.exportStatus.textContent = 'Choose where to save the playlist…';
-
     try {
       if (typeof window.showSaveFilePicker === 'function') {
         const handle = await window.showSaveFilePicker({
@@ -661,24 +666,15 @@
         link.click();
         link.remove();
         setTimeout(() => URL.revokeObjectURL(url), 1000);
-        elements.exportStatus.textContent = 'Export started. Your browser will use its normal download/save location prompt.';
+        elements.exportStatus.textContent = 'Export started using the browser save/download flow.';
       }
     } catch (error) {
-      if (error?.name === 'AbortError') {
-        elements.exportStatus.textContent = 'Export cancelled.';
-      } else {
-        elements.exportStatus.textContent = error?.message || 'Export failed.';
-      }
+      elements.exportStatus.textContent = error?.name === 'AbortError' ? 'Export cancelled.' : (error?.message || 'Export failed.');
     }
   });
 
   updateSelectionControls();
   applyColumnWidths();
 
-  window.TestPlannerPlaylist = {
-    buildUftPlaylistXml,
-    plannerStatus,
-    isSampleTitle,
-    testMethodName,
-  };
+  window.TestPlannerPlaylist = { buildUftPlaylistXml, plannerStatus, isSampleTitle, testMethodName };
 })();
