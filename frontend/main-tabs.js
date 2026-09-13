@@ -94,9 +94,31 @@
     activateTab(hashIndex >= 0 ? hashIndex : DEFAULT_TAB_INDEX);
   }
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initializeMainTabs);
-  } else {
+  function loadTestPlannerAssets() {
+    if (!document.querySelector('link[data-test-planner-style]')) {
+      const style = document.createElement('link');
+      style.rel = 'stylesheet';
+      style.href = 'test-planner.css';
+      style.dataset.testPlannerStyle = '1';
+      document.head.appendChild(style);
+    }
+
+    if (!document.querySelector('script[data-test-planner-script]')) {
+      const script = document.createElement('script');
+      script.src = 'test-planner.js';
+      script.dataset.testPlannerScript = '1';
+      document.body.appendChild(script);
+    }
+  }
+
+  const initialize = () => {
     initializeMainTabs();
+    loadTestPlannerAssets();
+  };
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initialize);
+  } else {
+    initialize();
   }
 })();
