@@ -143,7 +143,7 @@ def test_excel_exports_current_tracking_values():
 
 def test_publish_creates_run_updates_point_results_and_completes_it():
     client = Mock()
-    client.read_test_points.return_value = [
+    client.read_test_point_mappings.return_value = [
         {"testPointId": 501, "testCaseId": 10},
         {"testPointId": 502, "testCaseId": 10},
     ]
@@ -193,7 +193,7 @@ def test_publish_creates_run_updates_point_results_and_completes_it():
 
 def test_publish_manual_run_maps_outcome_and_marks_run_manual():
     client = Mock()
-    client.read_test_points.return_value = [{"testPointId": 5, "testCaseId": 1}]
+    client.read_test_point_mappings.return_value = [{"testPointId": 5, "testCaseId": 1}]
     client.create_test_run.return_value = {"id": 8, "name": "Manual"}
     client.list_test_results.return_value = [{"id": 80, "testPoint": {"id": "5"}}]
     client.update_test_results.return_value = []
