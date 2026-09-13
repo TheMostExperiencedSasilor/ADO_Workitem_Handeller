@@ -42,6 +42,10 @@ ADO_Workitem_Handeller/
 │   ├── index.html
 │   ├── styles.css
 │   └── app.js
+├── launcher/
+│   ├── Start-App.bat
+│   ├── Start-App.sh
+│   └── Start-App.command
 ├── docs/
 │   ├── architecture.md
 │   ├── security.md
@@ -52,21 +56,57 @@ ADO_Workitem_Handeller/
 └── README.md
 ```
 
-## One-click start (Windows)
+## One-click start
 
-Install Python 3.10 or newer once (enable **Add python.exe to PATH**), then
-double-click **Start-App.bat** in the repository folder.
+Install Python 3.10 or newer once. The launchers in `launcher/` all use the
+same cross-platform `start_app.py` bootstrapper, which creates `backend/.venv`,
+installs dependencies on the first run (and when `requirements.txt` changes),
+starts the app and opens your browser.
 
-The launcher creates `backend/.venv`, installs dependencies on the first run
-(and when `requirements.txt` changes), starts the app and opens your browser.
+### Windows
+
+Double-click:
+
+```text
+launcher/Start-App.bat
+```
+
+The root `Start-App.bat` is kept as a compatibility shortcut and forwards to
+the launcher folder.
+
+### macOS
+
+Double-click:
+
+```text
+launcher/Start-App.command
+```
+
+You can also run the Unix launcher from Terminal:
+
+```bash
+./launcher/Start-App.sh
+```
+
+### Linux / other Unix systems
+
+Run:
+
+```bash
+./launcher/Start-App.sh
+```
+
+If executable permissions were removed while copying the files, restore them once:
+
+```bash
+chmod +x launcher/Start-App.sh launcher/Start-App.command
+```
+
 An internet connection is needed for dependency installation. Later launches
-reuse the environment. No PowerShell activation or execution-policy changes are needed.
-
-Enter your organization, project and PAT in the existing **Setup** section.
-Saved settings are preserved. Keep the launcher window open; press **Ctrl+C**
-to stop. If startup fails, the window stays open so you can read the error.
-The launcher uses the configured host/port (default `http://127.0.0.1:5000`)
-and runs without the debug reloader. The manual startup below remains available.
+reuse the existing environment. Enter your organization, project and PAT in the
+existing **Setup** section. Saved settings are preserved. Keep the launcher
+window open; press **Ctrl+C** to stop. The launcher uses the configured host/port
+(default `http://127.0.0.1:5000`) and runs without the debug reloader.
 
 ## Quick Start
 
