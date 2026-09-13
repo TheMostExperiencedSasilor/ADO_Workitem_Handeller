@@ -110,21 +110,72 @@
   padding: 7px 8px;
 }
 
+.ado-run-dialog,
 .ote-transfer-dialog {
-  width: min(520px, calc(100vw - 32px));
+  width: min(620px, calc(100vw - 32px));
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 22px;
   box-shadow: var(--shadow);
 }
 
+.ado-run-dialog::backdrop,
 .ote-transfer-dialog::backdrop {
   background: rgba(16, 24, 40, 0.45);
 }
 
+.ado-run-dialog p,
 .ote-transfer-dialog p {
   color: var(--muted);
   line-height: 1.45;
+}
+
+.ado-run-preview {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: #f8fbff;
+  color: var(--text);
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+.published-runs-panel {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #f6fbf8;
+}
+
+.published-runs-panel > strong {
+  display: block;
+  margin-bottom: 8px;
+}
+
+.published-run-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 0;
+  border-top: 1px solid var(--border);
+}
+
+.published-run-item:first-of-type {
+  border-top: 0;
+}
+
+.published-run-item a {
+  color: var(--accent-dark);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.published-run-item a:hover {
+  text-decoration: underline;
 }
 
 @media (max-width: 900px) {
@@ -165,7 +216,6 @@
   opacity: 0.45;
   cursor: not-allowed;
 }
-
 
 .danger-button {
   background: #fff5f5;
