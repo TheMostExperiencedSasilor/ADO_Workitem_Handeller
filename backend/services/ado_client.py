@@ -18,6 +18,10 @@ class AdoClient:
             "Authorization": f"Basic {encoded_token}",
             "Accept": "application/json",
         }
+        self.json_headers = {
+            **self.headers,
+            "Content-Type": "application/json",
+        }
         self.patch_headers = {
             **self.headers,
             "Content-Type": "application/json-patch+json",
@@ -120,11 +124,19 @@ class AdoClient:
                 outcome = "Not Run"
             tester = point.get("tester") or {}
             tester_name = (tester.get("displayName") or tester.get("uniqueName") or "") if isinstance(tester, dict) else str(tester)
+            configuration = point.get("configuration") or {}
+            configuration_name = (
+                configuration.get("name") or configuration.get("id") or ""
+                if isinstance(configuration, dict)
+                else str(configuration)
+            )
             rows.append({
+                "testPointId": int(point["id"]) if point.get("id") is not None else None,
                 "testCaseId": case_id,
                 "title": reference.get("name") or "",
                 "outcome": outcome,
                 "tester": tester_name,
+                "configuration": str(configuration_name),
                 "order": orders.get(case_id),
             })
 
@@ -144,6 +156,89 @@ class AdoClient:
             key=lambda row: row["order"],
         ))
         return [next(ordered) if row["order"] is not None else row for row in rows]
+
+    def create_test_run(
+        self,
+        plan_id: int,
+        name: str,
+        point_ids: list[int],
+        automated: bool = True,
+    ) -> dict[str, Any]:
+        unique_point_ids = list(dict.fromkeys(int(point_id) for point_id in point_ids if int(point_id) > 0))
+        if not unique_point_ids:
+            raise ValueError("At least one test point is required to create a test run.")
+        response = requests.post(
+            f"{self.base_url}/_apis/test/runs",
+            headers=self.json_headers,
+            params={"api-version": self.config.ado_api_version},
+            json={
+                "name": name,
+                "plan": {"id": str(plan_id)},
+                "pointIds": unique_point_ids,
+                "automated": bool(automated),
+                "state": "InProgress",
+            },
+            timeout=30,
+        )
+        response.raise_for_status()
+        return response.json()
+
+    def list_test_results(self, run_id: int) -> list[dict[str, Any]]:
+        items: list[dict[str, Any]] = []
+        skip = 0
+        while True:
+            response = requests.get(
+                f"{self.base_url}/_apis/test/Runs/{int(run_id)}/results",
+                headers=self.headers,
+                params={
+                    "api-version": self.config.ado_api_version,
+                    "$skip": skip,
+                    "$top": 1000,
+                },
+                timeout=30,
+            )
+            response.raise_for_status()
+            data = response.json()
+            values = data.get("value", []) if isinstance(data, dict) else []
+            if not isinstance(values, list):
+                raise ValueError("Azure DevOps returned invalid test-run results.")
+            items.extend(values)
+            if len(values) < 1000:
+                return items
+            skip += len(values)
+
+    def update_test_results(
+        self,
+        run_id: int,
+        updates: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        updated: list[dict[str, Any]] = []
+        for start in range(0, len(updates), 200):
+            batch = updates[start:start + 200]
+            response = requests.patch(
+                f"{self.base_url}/_apis/test/Runs/{int(run_id)}/results",
+                headers=self.json_headers,
+                params={"api-version": self.config.ado_api_version},
+                json=batch,
+                timeout=30,
+            )
+            response.raise_for_status()
+            data = response.json()
+            values = data.get("value", []) if isinstance(data, dict) else []
+            if isinstance(values, list):
+                updated.extend(values)
+        return updated
+
+    def update_test_run(self, run_id: int, fields: dict[str, Any]) -> dict[str, Any]:
+        response = requests.patch(
+            f"{self.base_url}/_apis/test/runs/{int(run_id)}",
+            headers=self.json_headers,
+            params={"api-version": self.config.ado_api_version},
+            json=fields,
+            timeout=30,
+        )
+        response.raise_for_status()
+        return response.json()
 
     def create_work_item(
         self,
