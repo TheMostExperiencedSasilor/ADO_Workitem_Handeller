@@ -94,7 +94,32 @@
     activateTab(hashIndex >= 0 ? hashIndex : DEFAULT_TAB_INDEX);
   }
 
-  function loadTestPlannerAssets() {
+  function ensureTestPlannerSubtab() {
+    const summaryTab = document.querySelector('#testResultsSummaryTab');
+    const summaryPanel = document.querySelector('#testResultsSummaryPanel');
+    if (!summaryTab || !summaryPanel || document.querySelector('#testResultsPlannerTab')) return;
+
+    const plannerTab = document.createElement('button');
+    plannerTab.id = 'testResultsPlannerTab';
+    plannerTab.className = 'test-results-subtab';
+    plannerTab.type = 'button';
+    plannerTab.setAttribute('role', 'tab');
+    plannerTab.setAttribute('aria-selected', 'false');
+    plannerTab.setAttribute('aria-controls', 'testResultsPlannerPanel');
+    plannerTab.tabIndex = -1;
+    plannerTab.textContent = 'Test Planner';
+    summaryTab.insertAdjacentElement('afterend', plannerTab);
+
+    const plannerPanel = document.createElement('div');
+    plannerPanel.id = 'testResultsPlannerPanel';
+    plannerPanel.className = 'test-results-subpanel';
+    plannerPanel.setAttribute('role', 'tabpanel');
+    plannerPanel.setAttribute('aria-labelledby', 'testResultsPlannerTab');
+    plannerPanel.hidden = true;
+    summaryPanel.insertAdjacentElement('afterend', plannerPanel);
+  }
+
+  function loadWorkspaceAssets() {
     if (!document.querySelector('link[data-test-planner-style]')) {
       const style = document.createElement('link');
       style.rel = 'stylesheet';
@@ -103,17 +128,24 @@
       document.head.appendChild(style);
     }
 
-    if (!document.querySelector('script[data-test-planner-script]')) {
+    const scripts = [
+      ['test-results-summary.js', 'test-summary-script'],
+      ['test-planner.js', 'test-planner-script'],
+    ];
+
+    for (const [src, marker] of scripts) {
+      if (document.querySelector(`script[data-${marker}]`)) continue;
       const script = document.createElement('script');
-      script.src = 'test-planner.js';
-      script.dataset.testPlannerScript = '1';
+      script.src = src;
+      script.dataset[marker.replace(/-([a-z])/g, (_, char) => char.toUpperCase())] = '1';
       document.body.appendChild(script);
     }
   }
 
   const initialize = () => {
     initializeMainTabs();
-    loadTestPlannerAssets();
+    ensureTestPlannerSubtab();
+    loadWorkspaceAssets();
   };
 
   if (document.readyState === 'loading') {
