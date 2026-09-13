@@ -124,19 +124,11 @@ class AdoClient:
                 outcome = "Not Run"
             tester = point.get("tester") or {}
             tester_name = (tester.get("displayName") or tester.get("uniqueName") or "") if isinstance(tester, dict) else str(tester)
-            configuration = point.get("configuration") or {}
-            configuration_name = (
-                configuration.get("name") or configuration.get("id") or ""
-                if isinstance(configuration, dict)
-                else str(configuration)
-            )
             rows.append({
-                "testPointId": int(point["id"]) if point.get("id") is not None else None,
                 "testCaseId": case_id,
                 "title": reference.get("name") or "",
                 "outcome": outcome,
                 "tester": tester_name,
-                "configuration": str(configuration_name),
                 "order": orders.get(case_id),
             })
 
@@ -156,6 +148,36 @@ class AdoClient:
             key=lambda row: row["order"],
         ))
         return [next(ordered) if row["order"] is not None else row for row in rows]
+
+    def read_test_point_mappings(self, plan_id: int, suite_id: int) -> list[dict[str, Any]]:
+        """Return stable point identity needed when publishing ADO Test Runs."""
+        points = self._read_test_plan_pages(f"Plans/{plan_id}/Suites/{suite_id}/TestPoint")
+        mappings: list[dict[str, Any]] = []
+        for point in points:
+            reference = point.get("testCaseReference") or {}
+            point_id = point.get("id")
+            case_id = reference.get("id")
+            if point_id is None or case_id is None:
+                continue
+            tester = point.get("tester") or {}
+            tester_name = (
+                tester.get("displayName") or tester.get("uniqueName") or ""
+                if isinstance(tester, dict)
+                else str(tester)
+            )
+            configuration = point.get("configuration") or {}
+            configuration_name = (
+                configuration.get("name") or configuration.get("id") or ""
+                if isinstance(configuration, dict)
+                else str(configuration)
+            )
+            mappings.append({
+                "testPointId": int(point_id),
+                "testCaseId": int(case_id),
+                "tester": str(tester_name),
+                "configuration": str(configuration_name),
+            })
+        return mappings
 
     def create_test_run(
         self,
