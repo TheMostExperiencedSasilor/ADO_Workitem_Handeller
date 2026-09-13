@@ -4,12 +4,18 @@
   if (!panel || !trackerPanel || document.querySelector('#assignmentWorkbookSection')) return;
 
   const resultOptions = ['', 'Passed', 'Failed', 'Blocked', 'Not Run', 'N/A'];
+  const resultLabels = {
+    round1Results: 'Round 1',
+    round2Results: 'Round 2',
+    singleRunResults: 'Single Run',
+    manualRun: 'Manual Run',
+  };
   const editableKeys = [
     'round1Results', 'round2Results', 'singleRunResults', 'manualRun',
     'comment', 'solution', 'defects',
   ];
   let trackedRows = [];
-  let sessionMeta = {};
+  let sessionMeta = { publishedRuns: [] };
 
   const section = document.createElement('section');
   section.id = 'assignmentWorkbookSection';
@@ -18,9 +24,9 @@
     <div class="assignment-workbook-heading">
       <div>
         <h3>Test Result Tracker</h3>
-        <p>Read Define for metadata, use Execute to find one tester's assigned cases, log results here, save work as JSON, then export or transfer results to OTE.</p>
+        <p>Read Define + Execute, log results in the web table, save work locally, then publish a selected result column as a proper Azure DevOps Test Run.</p>
       </div>
-      <span class="mini-status">Define + Execute + OTE</span>
+      <span class="mini-status">ADO-native result publishing</span>
     </div>
 
     <div class="assignment-workbook-grid">
@@ -39,12 +45,12 @@
       <button id="saveAssignmentJson" type="button" class="secondary-button" disabled>Save Work</button>
       <button id="openAssignmentJson" type="button" class="secondary-button">Open Work</button>
       <button id="exportAssignmentWorkbook" type="button" class="secondary-button" disabled>Export Excel</button>
-      <button id="transferAssignmentToOte" type="button" class="secondary-button" disabled>Transfer to OTE</button>
+      <button id="createAdoTestRun" type="button" disabled>Create ADO Test Run</button>
       <button id="clearAllAssignmentResults" type="button" class="danger-button" disabled>Clear all results</button>
       <input id="assignmentJsonFile" type="file" accept="application/json,.json" hidden>
-      <input id="assignmentOteFile" type="file" accept="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.xlsx" hidden>
     </div>
     <p id="assignmentWorkbookStatus" class="mini-status" role="status" aria-live="polite">Load an assignment or open a saved JSON session.</p>
+    <div id="publishedRunsPanel" class="published-runs-panel" hidden></div>
 
     <div id="assignmentWorkbookPreview" hidden>
       <div id="assignmentWorkbookSummary" class="test-suite-summary"></div>
@@ -65,20 +71,24 @@
       </div>
     </div>
 
-    <dialog id="oteTransferDialog" class="ote-transfer-dialog">
+    <dialog id="adoTestRunDialog" class="ote-transfer-dialog ado-run-dialog">
       <form method="dialog">
-        <h3>Transfer to OTE</h3>
-        <p>Select which logged result column should be written into the OTE <strong>Outcome</strong> column.</p>
-        <label for="oteResultKey">Result source</label>
-        <select id="oteResultKey">
+        <h3>Create Azure DevOps Test Run</h3>
+        <p>Choose one tracker result column. Only rows containing a result will be included; Azure DevOps test-point IDs are validated again before anything is written.</p>
+        <label for="adoRunResultKey">Result source</label>
+        <select id="adoRunResultKey">
           <option value="round1Results">Round 1 results</option>
           <option value="round2Results">Round 2 results</option>
           <option value="singleRunResults">Single run results</option>
           <option value="manualRun">Manual run</option>
         </select>
+        <label for="adoRunName">Test run name</label>
+        <input id="adoRunName" type="text" maxlength="256">
+        <div id="adoRunPreview" class="ado-run-preview"></div>
+        <p id="adoRunDialogStatus" class="mini-status" role="status" aria-live="polite"></p>
         <div class="action-row">
           <button type="submit" value="cancel" class="secondary-button">Cancel</button>
-          <button id="chooseOteFile" type="button">Choose OTE File</button>
+          <button id="publishAdoTestRun" type="button">Create Test Run</button>
         </div>
       </form>
     </dialog>`;
@@ -91,14 +101,17 @@
   const saveButton = section.querySelector('#saveAssignmentJson');
   const openButton = section.querySelector('#openAssignmentJson');
   const exportButton = section.querySelector('#exportAssignmentWorkbook');
-  const transferButton = section.querySelector('#transferAssignmentToOte');
+  const createRunButton = section.querySelector('#createAdoTestRun');
   const clearAllResultsButton = section.querySelector('#clearAllAssignmentResults');
   const clearResultButtons = [...section.querySelectorAll('.clear-result-column')];
   const jsonFileInput = section.querySelector('#assignmentJsonFile');
-  const oteFileInput = section.querySelector('#assignmentOteFile');
-  const transferDialog = section.querySelector('#oteTransferDialog');
-  const oteResultKey = section.querySelector('#oteResultKey');
-  const chooseOteFile = section.querySelector('#chooseOteFile');
+  const runDialog = section.querySelector('#adoTestRunDialog');
+  const runResultKey = section.querySelector('#adoRunResultKey');
+  const runName = section.querySelector('#adoRunName');
+  const runPreview = section.querySelector('#adoRunPreview');
+  const runDialogStatus = section.querySelector('#adoRunDialogStatus');
+  const publishRunButton = section.querySelector('#publishAdoTestRun');
+  const publishedRunsPanel = section.querySelector('#publishedRunsPanel');
   const status = section.querySelector('#assignmentWorkbookStatus');
   const preview = section.querySelector('#assignmentWorkbookPreview');
   const summary = section.querySelector('#assignmentWorkbookSummary');
@@ -114,25 +127,9 @@
     const enabled = trackedRows.length > 0;
     saveButton.disabled = !enabled;
     exportButton.disabled = !enabled;
-    transferButton.disabled = !enabled;
+    createRunButton.disabled = !enabled;
     clearAllResultsButton.disabled = !enabled;
-    clearAllResultsButton.addEventListener('click', () => {
-    if (!trackedRows.length) return;
-
-    const confirmed = window.confirm(
-      'Clear Round 1, Round 2, Single run and Manual run results for all loaded test cases?'
-    );
-    if (!confirmed) return;
-
-    const resultKeys = ['round1Results', 'round2Results', 'singleRunResults', 'manualRun'];
-    for (const row of trackedRows) {
-      for (const key of resultKeys) row[key] = '';
-    }
-    renderRows();
-    setStatus('All result columns cleared. Comments, solutions and defects were kept.');
-  });
-
-  clearResultButtons.forEach((button) => { button.disabled = !enabled; });
+    clearResultButtons.forEach((button) => { button.disabled = !enabled; });
   }
 
   function makeResultSelect(row, key) {
@@ -193,10 +190,12 @@
 
   function renderSummary() {
     summary.replaceChildren();
+    const pointCount = trackedRows.reduce((sum, row) => sum + row.testPointIds.length, 0);
     const values = [
       ['Test Plan', sessionMeta.planId ?? ''],
       ['Suite', sessionMeta.suiteId ?? ''],
       ['Cases', trackedRows.length],
+      ['Test Points', pointCount],
       ['Tester', sessionMeta.tester || testerInput.value.trim()],
     ];
     for (const [label, value] of values) {
@@ -204,6 +203,36 @@
       item.textContent = `${label}: ${value}`;
       summary.appendChild(item);
     }
+  }
+
+  function renderPublishedRuns() {
+    const runs = Array.isArray(sessionMeta.publishedRuns) ? sessionMeta.publishedRuns : [];
+    publishedRunsPanel.replaceChildren();
+    if (!runs.length) {
+      publishedRunsPanel.hidden = true;
+      return;
+    }
+    const heading = document.createElement('strong');
+    heading.textContent = 'Published ADO Test Runs';
+    publishedRunsPanel.appendChild(heading);
+    for (const run of runs) {
+      const item = document.createElement('div');
+      item.className = 'published-run-item';
+      const text = document.createElement('span');
+      text.textContent = `${run.resultLabel || 'Results'} · Run ${run.runId} · ${run.publishedPoints || 0} point(s)`;
+      item.appendChild(text);
+      const target = run.webAccessUrl || run.apiUrl;
+      if (target) {
+        const link = document.createElement('a');
+        link.href = target;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        link.textContent = 'Open in ADO';
+        item.appendChild(link);
+      }
+      publishedRunsPanel.appendChild(item);
+    }
+    publishedRunsPanel.hidden = false;
   }
 
   function normalizeTrackedRow(row) {
@@ -214,6 +243,10 @@
       automationScriptName: String(row.automationScriptName || ''),
       order: row.order ?? null,
       tester: String(row.tester || ''),
+      testPointIds: Array.isArray(row.testPointIds)
+        ? [...new Set(row.testPointIds.map(Number).filter((value) => Number.isInteger(value) && value > 0))]
+        : [],
+      configurations: Array.isArray(row.configurations) ? row.configurations.map(String) : [],
     };
     for (const key of editableKeys) normalized[key] = String(row[key] || '');
     return normalized;
@@ -238,12 +271,13 @@
 
   function sessionDocument() {
     return {
-      version: 1,
+      version: 2,
       planId: sessionMeta.planId ?? null,
       suiteId: sessionMeta.suiteId ?? null,
       tester: sessionMeta.tester || testerInput.value.trim(),
       sourceUrl: urlInput.value.trim(),
       savedAt: new Date().toISOString(),
+      publishedRuns: Array.isArray(sessionMeta.publishedRuns) ? sessionMeta.publishedRuns : [],
       rows: trackedRows,
     };
   }
@@ -263,9 +297,15 @@
       });
       const data = await readJsonResponse(response);
       trackedRows = (data.rows || []).map(normalizeTrackedRow);
-      sessionMeta = { planId: data.planId, suiteId: data.suiteId, tester: data.matchedTester || testerInput.value.trim() };
+      sessionMeta = {
+        planId: data.planId,
+        suiteId: data.suiteId,
+        tester: data.matchedTester || testerInput.value.trim(),
+        publishedRuns: [],
+      };
       renderSummary();
       renderRows();
+      renderPublishedRuns();
       setStatus(data.message || 'Assignment loaded. Fill results directly in the table.');
     } catch (error) {
       setStatus(error.message || 'Unable to read the assignment.', true);
@@ -280,14 +320,20 @@
       const key = button.dataset.resultKey;
       const label = button.dataset.resultLabel || 'this result column';
       if (!key) return;
-
-      const confirmed = window.confirm(`Clear all values in "${label}"?`);
-      if (!confirmed) return;
-
+      if (!window.confirm(`Clear all values in "${label}"?`)) return;
       for (const row of trackedRows) row[key] = '';
       renderRows();
       setStatus(`${label} cleared for all loaded test cases.`);
     });
+  });
+
+  clearAllResultsButton.addEventListener('click', () => {
+    if (!trackedRows.length) return;
+    if (!window.confirm('Clear Round 1, Round 2, Single run and Manual run results for all loaded test cases?')) return;
+    const keys = ['round1Results', 'round2Results', 'singleRunResults', 'manualRun'];
+    trackedRows.forEach((row) => keys.forEach((key) => { row[key] = ''; }));
+    renderRows();
+    setStatus('All result columns cleared. Comments, solutions and defects were kept.');
   });
 
   saveButton.addEventListener('click', () => {
@@ -306,12 +352,22 @@
       const data = JSON.parse(await file.text());
       if (!data || !Array.isArray(data.rows)) throw new Error('Invalid saved work file.');
       trackedRows = data.rows.map(normalizeTrackedRow);
-      sessionMeta = { planId: data.planId, suiteId: data.suiteId, tester: data.tester || '' };
+      sessionMeta = {
+        planId: data.planId,
+        suiteId: data.suiteId,
+        tester: data.tester || '',
+        publishedRuns: Array.isArray(data.publishedRuns) ? data.publishedRuns : [],
+      };
       if (data.sourceUrl) urlInput.value = data.sourceUrl;
       if (data.tester) testerInput.value = data.tester;
       renderSummary();
       renderRows();
-      setStatus(`Opened saved work: ${file.name}`);
+      renderPublishedRuns();
+      const missingMappings = trackedRows.filter((row) => !row.testPointIds.length).length;
+      setStatus(missingMappings
+        ? `Opened ${file.name}. ${missingMappings} row(s) are from an older session without Test Point IDs; reload from ADO before publishing.`
+        : `Opened saved work: ${file.name}`,
+        false);
     } catch (error) {
       setStatus(error.message || 'Could not open the JSON work file.', true);
     } finally {
@@ -344,87 +400,98 @@
     }
   });
 
-  transferButton.addEventListener('click', () => transferDialog.showModal());
-  chooseOteFile.addEventListener('click', () => oteFileInput.click());
-  oteFileInput.addEventListener('change', async () => {
-    const file = oteFileInput.files?.[0];
-    if (!file) return;
-    transferDialog.close();
-    transferButton.disabled = true;
-    setStatus(`Transferring ${oteResultKey.options[oteResultKey.selectedIndex].text} to OTE…`);
+  function suggestedRunName() {
+    const source = resultLabels[runResultKey.value] || 'Results';
+    const tester = sessionMeta.tester || testerInput.value.trim() || 'Tester';
+    const stamp = new Date().toISOString().slice(0, 16).replace('T', ' ').replace(':', '');
+    return `Plan ${sessionMeta.planId || ''} Suite ${sessionMeta.suiteId || ''} - ${source} - ${tester} - ${stamp}`.trim();
+  }
+
+  function updateRunPreview(resetName = false) {
+    if (resetName) runName.value = suggestedRunName();
+    const key = runResultKey.value;
+    const rows = trackedRows.filter((row) => String(row[key] || '').trim());
+    const missingMapping = rows.filter((row) => !row.testPointIds.length).length;
+    const pointIds = new Set(rows.flatMap((row) => row.testPointIds));
+    const counts = new Map();
+    rows.forEach((row) => counts.set(row[key], (counts.get(row[key]) || 0) + row.testPointIds.length));
+    const parts = [...counts.entries()].map(([name, count]) => `${name}: ${count}`).join(' · ');
+    runPreview.textContent = rows.length
+      ? `${rows.length} case(s) · ${pointIds.size} test point(s)${parts ? ` · ${parts}` : ''}${missingMapping ? ` · ${missingMapping} row(s) need reload` : ''}`
+      : `No ${resultLabels[key] || 'selected'} results are currently logged.`;
+    publishRunButton.disabled = rows.length === 0 || missingMapping > 0;
+  }
+
+  createRunButton.addEventListener('click', () => {
+    runDialogStatus.textContent = '';
+    updateRunPreview(true);
+    if (typeof runDialog.showModal === 'function') runDialog.showModal();
+    else runDialog.setAttribute('open', '');
+  });
+
+  runResultKey.addEventListener('change', () => updateRunPreview(true));
+
+  publishRunButton.addEventListener('click', async () => {
+    if (publishRunButton.disabled) return;
+    publishRunButton.disabled = true;
+    runDialogStatus.textContent = 'Creating test run and publishing results…';
     try {
-      const formData = new FormData();
-      formData.append('oteFile', file);
-      formData.append('resultKey', oteResultKey.value);
-      formData.append('rows', JSON.stringify(trackedRows));
-      const response = await fetch('/api/test-plans/transfer-to-ote', { method: 'POST', body: formData });
-      if (!response.ok) {
-        const data = await response.json().catch(() => ({}));
-        throw new Error(data.error || `Request failed: ${response.status}`);
-      }
-      const updated = response.headers.get('X-OTE-Updated-Cases') || '?';
-      const stem = file.name.replace(/\.xlsx$/i, '');
-      const filename = `${stem}_Completed.xlsx`;
-      downloadBlob(await response.blob(), filename);
-      setStatus(`Transferred outcomes for ${updated} Test Case(s) into OTE: ${filename}`);
+      const response = await fetch('/api/test-plans/publish-test-run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          url: urlInput.value.trim(),
+          resultKey: runResultKey.value,
+          runName: runName.value.trim(),
+          rows: trackedRows,
+        }),
+      });
+      const data = await readJsonResponse(response);
+      sessionMeta.publishedRuns = Array.isArray(sessionMeta.publishedRuns) ? sessionMeta.publishedRuns : [];
+      sessionMeta.publishedRuns.push({
+        runId: data.runId,
+        runName: data.runName,
+        resultSource: data.resultSource,
+        resultLabel: data.resultLabel,
+        publishedPoints: data.publishedPoints,
+        publishedCases: data.publishedCases,
+        webAccessUrl: data.webAccessUrl || '',
+        apiUrl: data.apiUrl || '',
+        publishedAt: new Date().toISOString(),
+      });
+      renderPublishedRuns();
+      if (typeof runDialog.close === 'function') runDialog.close();
+      else runDialog.removeAttribute('open');
+      setStatus(`${data.message || `Created ADO Test Run ${data.runId}.`} Save Work to keep the run reference in this session.`);
     } catch (error) {
-      if (error instanceof TypeError && /fetch/i.test(error.message || '')) {
-        let backendAvailable = false;
-        try {
-          const health = await fetch('/api/health', { cache: 'no-store' });
-          backendAvailable = health.ok;
-        } catch {
-          backendAvailable = false;
-        }
-        setStatus(
-          backendAvailable
-            ? 'OTE transfer connection was interrupted while processing the workbook. Please try again.'
-            : 'Backend connection was lost during OTE transfer. Keep the launcher window open, restart the app if needed, then try again.',
-          true
-        );
-      } else {
-        setStatus(error.message || 'Unable to transfer results to OTE.', true);
-      }
+      runDialogStatus.textContent = error.message || 'Unable to create the ADO Test Run.';
+      runDialogStatus.classList.add('error');
     } finally {
-      oteFileInput.value = '';
-      enableWorkActions();
+      updateRunPreview(false);
     }
   });
 
   const primaryUrl = document.querySelector('#testPlanUrl');
+  const plannerUrl = document.querySelector('#plannerTestPlanUrl');
   const chartsUrl = document.querySelector('#testChartsUrl');
   if (primaryUrl) {
     let syncingUrl = false;
-    const inputs = [primaryUrl, urlInput, chartsUrl].filter(Boolean);
+    const inputs = [primaryUrl, plannerUrl, urlInput, chartsUrl].filter(Boolean);
     const syncFrom = (source) => {
       if (syncingUrl) return;
       syncingUrl = true;
-      for (const input of inputs) {
-        if (input !== source) input.value = source.value;
-      }
+      inputs.forEach((input) => { if (input !== source) input.value = source.value; });
       syncingUrl = false;
     };
     inputs.forEach((input) => input.addEventListener('input', () => syncFrom(input)));
-    if (primaryUrl.value.trim()) {
-      for (const input of inputs) {
-        if (input !== primaryUrl) input.value = primaryUrl.value.trim();
-      }
-    }
+    if (primaryUrl.value.trim()) inputs.forEach((input) => { if (input !== primaryUrl) input.value = primaryUrl.value.trim(); });
   }
 
   const subTabs = [
-    {
-      tab: document.querySelector('#testResultsSummaryTab'),
-      panel: document.querySelector('#testResultsSummaryPanel'),
-    },
-    {
-      tab: document.querySelector('#testResultsTrackerTab'),
-      panel: document.querySelector('#testResultsTrackerPanel'),
-    },
-    {
-      tab: document.querySelector('#testResultsChartsTab'),
-      panel: document.querySelector('#testResultsChartsPanel'),
-    },
+    { tab: document.querySelector('#testResultsSummaryTab'), panel: document.querySelector('#testResultsSummaryPanel') },
+    { tab: document.querySelector('#testResultsPlannerTab'), panel: document.querySelector('#testResultsPlannerPanel') },
+    { tab: document.querySelector('#testResultsTrackerTab'), panel: document.querySelector('#testResultsTrackerPanel') },
+    { tab: document.querySelector('#testResultsChartsTab'), panel: document.querySelector('#testResultsChartsPanel') },
   ].filter((item) => item.tab && item.panel);
 
   function activateResultSubtab(index, focus = false) {
