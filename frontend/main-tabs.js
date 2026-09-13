@@ -148,9 +148,12 @@
     loadWorkspaceAssets();
   };
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initialize);
-  } else {
+  // main-tabs.js is loaded at the end of index.html, after the Test Results DOM
+  // exists. Initialize immediately so Result Tracker can discover Test Planner
+  // before test-assignment-workbook.js wires the subtab controller.
+  if (document.querySelector('main.layout')) {
     initialize();
+  } else {
+    document.addEventListener('DOMContentLoaded', initialize, { once: true });
   }
 })();
