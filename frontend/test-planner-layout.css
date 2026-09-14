@@ -12,11 +12,12 @@
   border-radius: 6px;
 }
 
-/* The table owns its explicit pixel width. When a column grows, the wrapper
-   scrolls horizontally instead of squeezing another column. */
+/* The table owns an explicit pixel width. Widening one column makes the table
+   wider and the wrapper scrolls horizontally instead of squeezing neighbours. */
 .planner-table {
   table-layout: fixed !important;
   min-width: 0 !important;
+  max-width: none !important;
   border-collapse: separate;
   border-spacing: 0;
 }
@@ -30,7 +31,35 @@
   vertical-align: top;
 }
 
-/* Automatic Wrap Text for long planner content. */
+/* IMPORTANT: never remove the selection cell from the table grid. The legacy
+   stylesheet used display:none, which shifts Test Case ID into column 1 and
+   makes its header disappear behind the zero-width selection <col>. */
+.planner-table .planner-selection-cell {
+  display: table-cell !important;
+}
+
+.planner-table:not(.selection-mode) .planner-selection-col,
+.planner-table:not(.selection-mode) .planner-selection-cell {
+  width: 0 !important;
+  min-width: 0 !important;
+  max-width: 0 !important;
+  padding: 0 !important;
+  border-left: 0 !important;
+  border-right: 0 !important;
+  overflow: hidden !important;
+}
+
+.planner-table:not(.selection-mode) .planner-selection-cell > * {
+  display: none !important;
+}
+
+.planner-table.selection-mode .planner-selection-cell {
+  width: 46px !important;
+  min-width: 46px !important;
+  max-width: 46px !important;
+}
+
+/* Automatic Wrap Text for normal text columns. */
 .planner-table td:nth-child(3),
 .planner-table td:nth-child(5),
 .planner-table td:nth-child(6),
@@ -41,7 +70,7 @@
   overflow-wrap: anywhere !important;
 }
 
-/* Test Case ID and Status should never wrap or collapse digit-by-digit. */
+/* Test Case ID and Status must remain readable and on one line. */
 .planner-table th:nth-child(2),
 .planner-table td:nth-child(2),
 .planner-table th:nth-child(4),
@@ -56,32 +85,6 @@
 .planner-filter-row select {
   width: 100%;
   min-width: 0;
-}
-
-/* A larger hit area on the real trailing edge of every header. */
-.planner-header-row th[data-planner-column] {
-  position: sticky;
-}
-
-.planner-header-row th[data-planner-column] > .test-resize-handle.column {
-  position: absolute;
-  right: -5px;
-  top: 0;
-  bottom: 0;
-  width: 11px;
-  cursor: col-resize;
-  touch-action: none;
-  z-index: 12;
-  border-right: 2px solid var(--border);
-  background: transparent;
-}
-
-.planner-header-row th[data-planner-column] > .test-resize-handle.column:hover,
-.planner-header-row th[data-planner-column] > .test-resize-handle.column:focus-visible,
-.planner-header-row th[data-planner-column] > .test-resize-handle.column.planner-resizing {
-  border-right-color: var(--accent);
-  background: rgba(23, 104, 209, 0.12);
-  outline: none;
 }
 
 /* Keep the two header rows frozen while vertically scrolling the suite. */
@@ -99,15 +102,33 @@
   background: #fff;
 }
 
-/* The hidden checkbox column must not steal width from Test Case ID. */
-.planner-table:not(.selection-mode) .planner-selection-col,
-.planner-table:not(.selection-mode) .planner-selection-cell {
-  width: 0 !important;
-  min-width: 0 !important;
-  max-width: 0 !important;
-  padding-left: 0 !important;
-  padding-right: 0 !important;
-  border: 0 !important;
+/* The resize target lives INSIDE the real right edge of the header. Keeping it
+   inside avoids the next sticky header painting over the hit target. */
+.planner-header-row th[data-planner-column] {
+  position: sticky;
+}
+
+.planner-header-row th[data-planner-column] > .test-resize-handle.column {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 10px;
+  cursor: col-resize;
+  touch-action: none;
+  user-select: none;
+  pointer-events: auto;
+  z-index: 20;
+  border-right: 2px solid var(--border);
+  background: transparent;
+}
+
+.planner-header-row th[data-planner-column] > .test-resize-handle.column:hover,
+.planner-header-row th[data-planner-column] > .test-resize-handle.column:focus-visible,
+.planner-header-row th[data-planner-column] > .test-resize-handle.column.planner-resizing {
+  border-right-color: var(--accent);
+  background: rgba(23, 104, 209, 0.16);
+  outline: none;
 }
 
 @media (max-width: 700px) {
