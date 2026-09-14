@@ -68,9 +68,17 @@
   colgroup.id = 'assignmentGridColumns';
   widths.forEach(() => colgroup.appendChild(document.createElement('col')));
   table.insertBefore(colgroup, table.firstChild);
+  const syncStickyMetrics = () => {
+    table.style.setProperty('--assignment-col1-width', widths[0] + 'px');
+    const firstHeaderRow = table.tHead?.rows?.[0];
+    if (firstHeaderRow) {
+      table.style.setProperty('--assignment-header-row-height', firstHeaderRow.offsetHeight + 'px');
+    }
+  };
   const applyWidths = () => {
     [...colgroup.children].forEach((col, i) => { col.style.width = widths[i] + 'px'; });
     table.style.width = widths.reduce((a,b) => a+b, 0) + 'px';
+    syncStickyMetrics();
   };
   table.querySelectorAll('th').forEach((th, i) => {
     const handle = document.createElement('span'); handle.className = 'assignment-col-resize';
@@ -84,6 +92,88 @@
     th.appendChild(handle);
   });
   applyWidths();
+
+  const filterRow = document.createElement('tr');
+  filterRow.className = 'assignment-filter-row';
+  const filterControls = new Map();
+  const addSearchFilter = (columnIndex, placeholder) => {
+    const th = document.createElement('th');
+    const input = document.createElement('input');
+    input.type = 'search';
+    input.className = 'assignment-column-filter';
+    input.placeholder = placeholder;
+    input.setAttribute('aria-label', placeholder);
+    th.appendChild(input);
+    filterControls.set(columnIndex, input);
+    return th;
+  };
+  const addSelectFilter = (columnIndex, label, resultFilter = false) => {
+    const th = document.createElement('th');
+    const select = document.createElement('select');
+    select.className = 'assignment-column-filter';
+    select.setAttribute('aria-label', label);
+    select.innerHTML = resultFilter
+      ? '<option value="">All</option><option value="__EMPTY__">Blank</option><option value="Passed">Passed</option><option value="Failed">Failed</option><option value="Blocked">Blocked</option><option value="Not Run">Not Run</option><option value="N/A">N/A</option>'
+      : '<option value="">All</option>';
+    th.appendChild(select);
+    filterControls.set(columnIndex, select);
+    return th;
+  };
+  filterRow.appendChild(addSearchFilter(0, 'Search ID'));
+  filterRow.appendChild(addSearchFilter(1, 'Search title'));
+  filterRow.appendChild(addSelectFilter(2, 'Filter Product Area'));
+  filterRow.appendChild(addSearchFilter(3, 'Search automation script'));
+  [4, 5, 6, 7].forEach((columnIndex) => filterRow.appendChild(addSelectFilter(columnIndex, 'Filter results', true)));
+  [8, 9, 10].forEach(() => filterRow.appendChild(document.createElement('th')));
+  table.tHead.appendChild(filterRow);
+
+  const productAreaFilter = filterControls.get(2);
+  const refreshProductAreaOptions = () => {
+    const current = productAreaFilter.value;
+    const values = [...new Set([...body.rows]
+      .map((tr) => String(tr.cells[2]?.textContent || '').trim())
+      .filter(Boolean))]
+      .sort((a, b) => a.localeCompare(b));
+    productAreaFilter.replaceChildren(new Option('All', ''), ...values.map((value) => new Option(value, value)));
+    productAreaFilter.value = values.includes(current) ? current : '';
+  };
+  const applyFilters = () => {
+    const idQuery = filterControls.get(0).value.trim().toLowerCase();
+    const titleQuery = filterControls.get(1).value.trim().toLowerCase();
+    const productArea = filterControls.get(2).value;
+    const automationQuery = filterControls.get(3).value.trim().toLowerCase();
+    [...body.rows].forEach((tr) => {
+      const textAt = (index) => String(tr.cells[index]?.textContent || '').trim();
+      const resultAt = (index) => tr.cells[index]?.querySelector('select')?.value || '';
+      const matchesText =
+        textAt(0).toLowerCase().includes(idQuery) &&
+        textAt(1).toLowerCase().includes(titleQuery) &&
+        textAt(3).toLowerCase().includes(automationQuery);
+      const matchesProduct = !productArea || textAt(2) === productArea;
+      const matchesResults = [4, 5, 6, 7].every((columnIndex) => {
+        const selected = filterControls.get(columnIndex).value;
+        if (!selected) return true;
+        const value = resultAt(columnIndex);
+        return selected === '__EMPTY__' ? !value : value === selected;
+      });
+      tr.hidden = !(matchesText && matchesProduct && matchesResults);
+    });
+  };
+  filterControls.forEach((control) => {
+    control.addEventListener(control.tagName === 'INPUT' ? 'input' : 'change', applyFilters);
+  });
+  section.addEventListener('change', (event) => {
+    if (event.target.closest('#assignmentWorkbookRows')) applyFilters();
+  });
+  const filterObserver = new MutationObserver(() => {
+    refreshProductAreaOptions();
+    applyFilters();
+    requestAnimationFrame(syncStickyMetrics);
+  });
+  filterObserver.observe(body, { childList: true });
+  refreshProductAreaOptions();
+  applyFilters();
+  requestAnimationFrame(syncStickyMetrics);
 
   const getEditableCells = () => [...body.rows].map((tr) => [...tr.cells].slice(editableOffset));
   const bounds = () => !anchor || !focus ? null : ({r1:Math.min(anchor.r,focus.r),r2:Math.max(anchor.r,focus.r),c1:Math.min(anchor.c,focus.c),c2:Math.max(anchor.c,focus.c)});
