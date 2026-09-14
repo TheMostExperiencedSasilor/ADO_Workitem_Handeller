@@ -3,6 +3,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
 
+from services.protected_test_run_publisher import ProtectedTestRunPublisher
 from services.result_logging_guard import ResultLoggingGuard
 
 
@@ -92,3 +93,60 @@ def test_allow_duplicate_logging_bypasses_status_filter():
     assert report["eligibleCaseIds"] == [3001]
     assert report["eligiblePointIds"] == [301]
     assert report["skippedCases"] == 0
+
+
+class PublishingClient(FakeClient):
+    def __init__(self, points):
+        super().__init__(points)
+        self.created_point_ids = None
+        self.updated_results = None
+
+    def read_test_point_mappings(self, plan_id, suite_id):
+        return [
+            {"testPointId": int(raw["id"]), "testCaseId": int(raw["testCaseReference"]["id"])}
+            for raw in self.points
+        ]
+
+    def create_test_run(self, plan_id, name, point_ids, automated=True):
+        self.created_point_ids = list(point_ids)
+        return {"id": 77, "name": name}
+
+    def list_test_results(self, run_id):
+        return [
+            {"id": 9000 + point_id, "testPoint": {"id": str(point_id)}}
+            for point_id in self.created_point_ids or []
+        ]
+
+    def update_test_results(self, run_id, updates):
+        self.updated_results = updates
+        return updates
+
+    def update_test_run(self, run_id, fields):
+        return {"id": run_id, "name": "Guarded run", "state": fields.get("state", "Completed")}
+
+
+def test_protected_publisher_creates_run_with_active_points_only():
+    client = PublishingClient([
+        point(401, 4001, "unspecified"),
+        point(402, 4001, "passed"),
+    ])
+    publisher = ProtectedTestRunPublisher(client)
+
+    result = publisher.publish(
+        plan_id=1,
+        suite_id=2,
+        rows=[{
+            "testCaseId": 4001,
+            "testPointIds": [401, 402],
+            "round1Results": "Passed",
+            "comment": "guarded",
+        }],
+        result_key="round1Results",
+        run_name="Guarded run",
+    )
+
+    assert client.created_point_ids == [401]
+    assert [update["id"] for update in client.updated_results] == [9401]
+    assert result["publishedPoints"] == 1
+    assert result["skippedPoints"] == 1
+    assert result["skippedCases"] == 1
