@@ -24,55 +24,61 @@ ADO_Workitem_Handeller/
 │   ├── app.py
 │   ├── config.py
 │   ├── requirements.txt
-│   ├── .env.example
-│   ├── routes/
-│   │   ├── __init__.py
-│   │   ├── chat_routes.py
-│   │   ├── setup_routes.py
-│   │   └── work_item_routes.py
-│   ├── rules/
-│   │   ├── __init__.py
-│   │   └── writing_rules.py
-│   └── services/
-│       ├── __init__.py
-│       ├── ado_client.py
-│       ├── ai_client.py
-│       └── work_item_builder.py
+│   └── .env.example
 ├── frontend/
 │   ├── index.html
 │   ├── styles.css
 │   └── app.js
 ├── launcher/
+│   ├── Start-App.vbs
 │   ├── Start-App.bat
+│   ├── Stop-App.vbs
+│   ├── Stop-App.bat
 │   ├── Start-App.sh
 │   └── Start-App.command
 ├── docs/
-│   ├── architecture.md
-│   ├── security.md
-│   └── writing-rules.md
 ├── tests/
-│   └── test_writing_rules.py
+├── start_app.py
 ├── .gitignore
 └── README.md
 ```
 
-## One-click start
+## One-click start — Go Live style
 
-Install Python 3.10 or newer once. The launchers in `launcher/` all use the
-same cross-platform `start_app.py` bootstrapper, which creates `backend/.venv`,
-installs dependencies on the first run (and when `requirements.txt` changes),
-starts the app and opens your browser.
+Install Python 3.10 or newer once. The launcher uses the cross-platform
+`start_app.py` bootstrapper, which creates `backend/.venv`, installs dependencies
+on the first run (and when `requirements.txt` changes), starts the Flask backend
+as a detached background process, waits until `/api/health` is ready, and opens
+the configured localhost URL in your default browser.
+
+Once the app is running, the launcher exits. There is no terminal window that
+must remain open.
 
 ### Windows
 
-Double-click:
+For the normal no-console experience, double-click:
 
 ```text
-launcher/Start-App.bat
+launcher/Start-App.vbs
 ```
 
-The root `Start-App.bat` is kept as a compatibility shortcut and forwards to
-the launcher folder.
+This behaves like a small **Go Live** button:
+
+```text
+one click -> start background backend -> wait for health -> open localhost
+```
+
+If the backend is already running, clicking `Start-App.vbs` again simply opens
+the existing localhost app instead of starting a duplicate process.
+
+To stop the background backend, double-click:
+
+```text
+launcher/Stop-App.vbs
+```
+
+`Start-App.bat` and `Stop-App.bat` remain available for troubleshooting from a
+Command Prompt, but they are no longer required to stay open.
 
 ### macOS
 
@@ -88,6 +94,9 @@ You can also run the Unix launcher from Terminal:
 ./launcher/Start-App.sh
 ```
 
+The bootstrapper returns after the detached backend is ready, so the shell is not
+the lifetime owner of the web server.
+
 ### Linux / other Unix systems
 
 Run:
@@ -102,11 +111,18 @@ If executable permissions were removed while copying the files, restore them onc
 chmod +x launcher/Start-App.sh launcher/Start-App.command
 ```
 
-An internet connection is needed for dependency installation. Later launches
-reuse the existing environment. Enter your organization, project and PAT in the
-existing **Setup** section. Saved settings are preserved. Keep the launcher
-window open; press **Ctrl+C** to stop. The launcher uses the configured host/port
-(default `http://127.0.0.1:5000`) and runs without the debug reloader.
+An internet connection is needed for dependency installation. Later launches reuse
+the existing environment. Enter your organization, project and PAT in the existing
+**Setup** section. Saved settings are preserved.
+
+The launcher uses the configured host/port (default `http://127.0.0.1:5000`) and
+runs without Flask's debug reloader. Runtime state is stored under `.runtime/` and
+server/launcher diagnostics are written to:
+
+```text
+logs/backend.log
+logs/launcher.log
+```
 
 ## Quick Start
 
@@ -119,7 +135,7 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-2. Start the backend.
+2. Start the backend manually when debugging.
 
 ```powershell
 python app.py
