@@ -1,19 +1,20 @@
 # ADO Work Item AI Assistant
 
-A lightweight Python + HTML/CSS/JavaScript assistant for reading Azure DevOps work items, analyzing them with an AI backend, and creating or editing new ADO work items with writing rules.
+A lightweight Python + HTML/CSS/JavaScript assistant for Azure DevOps work items and Test Plans, with local AI-assisted workflows and browser-based test planning/result handling.
 
 ## Core Features
 
 - Read Azure DevOps work items by ID using a Personal Access Token (PAT).
-- Supports input work item types such as Objective, Bug, Post Development Bug, User Story, Feature, and Epic.
+- Supports work item workflows for Objective, Bug, Post Development Bug, User Story, Feature, Task, and Test Case.
 - Analyze work item content through a backend AI service using a GitHub token or another OpenAI-compatible AI endpoint.
 - Create or edit Azure DevOps work items such as Task, User Story, and Feature.
-- Generate new work independently or from analyzed source work items.
-- Apply writing rules such as SMART checks and splitting one large item into three smaller items.
-- Includes ADO-style work item type tabs for Feature, Objective, Post Development Bug, Task, Test Case, and User Story page shells.
+- Apply writing rules such as SMART checks and splitting one large item into smaller work items.
+- Test Results workspace with Summary, Test Planner, Result Tracker, and Charts.
+- Test Planner can select ADO test cases and generate Visual Studio UFT `.playlist` files directly in the web app.
+- Result Tracker supports editable result grids, JSON save/open, Excel export, ADO Test Run publishing, and optional OTE workbook transfer.
 - Includes a floating AI chatbox in the frontend.
-- Includes a local setup section for entering ADO and AI settings.
-- Shows an `ADO connected` frontend notification after the backend verifies the saved ADO settings.
+- Includes a local Setup page for ADO and AI settings.
+- Shows live ADO connection state and a glowing local app running/stopped indicator.
 - Keeps all secrets in backend `.env` only. No PAT or GitHub token is exposed to frontend code.
 
 ## Project Structure
@@ -21,21 +22,11 @@ A lightweight Python + HTML/CSS/JavaScript assistant for reading Azure DevOps wo
 ```text
 ADO_Workitem_Handeller/
 ├── backend/
-│   ├── app.py
-│   ├── config.py
-│   ├── requirements.txt
-│   └── .env.example
 ├── frontend/
-│   ├── index.html
-│   ├── styles.css
-│   └── app.js
 ├── launcher/
-│   ├── Start-App.vbs
-│   ├── Start-App.bat
-│   ├── Stop-App.vbs
-│   ├── Stop-App.bat
-│   ├── Start-App.sh
-│   └── Start-App.command
+│   ├── Start-Windows.vbs
+│   ├── Start-Unix.command
+│   └── Start-Linux.sh
 ├── docs/
 ├── tests/
 ├── start_app.py
@@ -43,111 +34,87 @@ ADO_Workitem_Handeller/
 └── README.md
 ```
 
-## One-click start — Go Live style
+The former standalone `UFT_Playlist_Generator-main` PowerShell/WinForms utility has been removed. Playlist generation is now part of the Test Planner page, so there is no second implementation or separate executable/build path to maintain.
 
-Install Python 3.10 or newer once. The launcher uses the cross-platform
-`start_app.py` bootstrapper, which creates `backend/.venv`, installs dependencies
-on the first run (and when `requirements.txt` changes), starts the Flask backend
-as a detached background process, waits until `/api/health` is ready, and opens
-the configured localhost URL in your default browser.
+## One-click start — one launcher per platform
 
-Once the app is running, the launcher exits. There is no terminal window that
-must remain open.
+There are exactly **three user-facing launchers**: one for Windows, one for macOS/Unix, and one for Linux. All three do the same job:
+
+```text
+one click -> ensure Python environment -> start/reuse detached backend
+          -> wait for /api/health -> open localhost -> launcher exits
+```
+
+The backend keeps running after the launcher exits. If it is already running, using the launcher again simply opens the existing localhost app instead of starting a duplicate process.
 
 ### Windows
-
-For the normal no-console experience, double-click:
-
-```text
-launcher/Start-App.vbs
-```
-
-This behaves like a small **Go Live** button:
-
-```text
-one click -> start background backend -> wait for health -> open localhost
-```
-
-If the backend is already running, clicking `Start-App.vbs` again simply opens
-the existing localhost app instead of starting a duplicate process.
-
-To stop the background backend, double-click:
-
-```text
-launcher/Stop-App.vbs
-```
-
-`Start-App.bat` and `Stop-App.bat` remain available for troubleshooting from a
-Command Prompt, but they are no longer required to stay open.
-
-### macOS
 
 Double-click:
 
 ```text
-launcher/Start-App.command
+launcher/Start-Windows.vbs
 ```
 
-You can also run the Unix launcher from Terminal:
+This launcher calls Python directly and **does not go through a BAT file**. It prefers `pythonw.exe`, so Command Prompt / Windows Terminal should not appear. First-run dependency installation is also launched with the Windows `CREATE_NO_WINDOW` flag.
 
-```bash
-./launcher/Start-App.sh
+### macOS / Unix
+
+Double-click:
+
+```text
+launcher/Start-Unix.command
 ```
 
-The bootstrapper returns after the detached backend is ready, so the shell is not
-the lifetime owner of the web server.
+It starts the same `start_app.py` bootstrapper and returns after the detached backend is healthy and localhost has opened.
 
-### Linux / other Unix systems
+### Linux
 
 Run:
 
 ```bash
-./launcher/Start-App.sh
+./launcher/Start-Linux.sh
 ```
 
-If executable permissions were removed while copying the files, restore them once:
+If executable permissions were removed while copying the repository, restore them once:
 
 ```bash
-chmod +x launcher/Start-App.sh launcher/Start-App.command
+chmod +x launcher/Start-Unix.command launcher/Start-Linux.sh
 ```
 
-An internet connection is needed for dependency installation. Later launches reuse
-the existing environment. Enter your organization, project and PAT in the existing
-**Setup** section. Saved settings are preserved.
-
-The launcher uses the configured host/port (default `http://127.0.0.1:5000`) and
-runs without Flask's debug reloader. Runtime state is stored under `.runtime/` and
-server/launcher diagnostics are written to:
+The configured host/port is respected; the default is `http://127.0.0.1:5000`. Runtime state is stored under `.runtime/` and logs are written to:
 
 ```text
 logs/backend.log
 logs/launcher.log
 ```
 
-## Quick Start
+For troubleshooting or an explicit manual stop, the shared bootstrapper is available directly:
 
-1. Create and activate a Python virtual environment.
+```text
+python start_app.py --stop
+```
+
+## Manual / Debug Start
+
+The launchers are the normal way to use the app. For backend debugging, you can still run it manually.
 
 ```powershell
 cd backend
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-```
-
-2. Start the backend manually when debugging.
-
-```powershell
 python app.py
 ```
 
-3. Open the app.
+Then open:
 
 ```text
 http://localhost:5000
 ```
 
-4. Use the Setup section in the page to enter:
+## Setup
+
+Use the Setup page to enter:
 
 ```text
 ADO organization
@@ -158,30 +125,13 @@ AI model
 GitHub / AI token
 ```
 
-The setup section saves values into `backend/.env`. Password fields are cleared after saving and token values are never returned to the frontend. If the backend can reach the configured ADO project, the header shows `ADO connected`.
+The Setup page saves values into `backend/.env`. Password fields are cleared after saving and token values are never returned to the frontend. If the backend can reach the configured ADO project, the header shows `ADO connected`.
 
-## Work Item Page Tabs
-
-The frontend includes page shells for:
-
-- Feature
-- Objective
-- Post Development Bug
-- Task
-- Test Case
-- User Story
-
-These are placeholders for the next design pass. Selecting Feature, Task, or User Story also syncs the create/edit type selector.
-
-## Manual Setup Alternative
-
-You can still create `.env` yourself if preferred.
+You can also create `.env` manually if preferred:
 
 ```powershell
 Copy-Item .env.example .env
 ```
-
-Then fill in `.env` with your ADO and AI settings.
 
 ```env
 ADO_ORGANIZATION=your-org
@@ -196,7 +146,3 @@ GITHUB_TOKEN=your-github-token
 ## Security Rule
 
 Never put `ADO_PAT`, `GITHUB_TOKEN`, or other secrets in frontend files. The frontend calls backend endpoints only. The backend reads secrets from `.env`.
-
-## Current Status
-
-This is an initial scaffold. The main architecture is in place, and the next step is to test against a real Azure DevOps project and tune the work item fields for your team's templates.

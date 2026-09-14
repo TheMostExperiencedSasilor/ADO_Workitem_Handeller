@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const html = fs.readFileSync('frontend/index.html', 'utf8');
 const js = fs.readFileSync('frontend/app.js', 'utf8');
 const css = fs.readFileSync('frontend/styles.css', 'utf8');
-const vbs = fs.readFileSync('launcher/Start-App.vbs', 'utf8');
+const vbs = fs.readFileSync('launcher/Start-Windows.vbs', 'utf8');
 
 test('browser header has a glowing live app status indicator', () => {
   assert.match(html, /id="healthBadge"[^>]*backend-status/);
