@@ -83,12 +83,17 @@ def setup_environment() -> None:
     stamp = ENV / ".requirements.sha256"
     if not stamp.exists() or stamp.read_text().strip() != digest:
         _log_launcher("Installing dependencies because requirements changed or this is the first run.")
+        pip_kwargs = {
+            "cwd": BACKEND,
+            "check": True,
+            "stdout": subprocess.DEVNULL,
+            "stderr": subprocess.STDOUT,
+        }
+        if os.name == "nt":
+            pip_kwargs["creationflags"] = getattr(subprocess, "CREATE_NO_WINDOW", 0)
         subprocess.run(
             [str(ENV_PYTHON), "-m", "pip", "install", "-r", str(requirements)],
-            cwd=BACKEND,
-            check=True,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.STDOUT,
+            **pip_kwargs,
         )
         stamp.write_text(digest)
 
