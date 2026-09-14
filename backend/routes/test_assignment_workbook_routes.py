@@ -7,8 +7,9 @@ from flask import Blueprint, jsonify, request, send_file
 from config import AppConfig
 from routes.test_plan_routes import parse_test_plan_url
 from services.ado_client import AdoClient
+from services.protected_test_run_publisher import ProtectedTestRunPublisher
+from services.result_logging_guard import ResultLoggingGuard
 from services.test_assignment_workbook import TestAssignmentWorkbookService
-from services.test_run_publisher import TestRunPublisher
 
 assignment_workbook_bp = Blueprint(
     "assignment_workbook", __name__, url_prefix="/api/test-plans"
@@ -34,6 +35,12 @@ def _client() -> AdoClient:
 
 def _service() -> TestAssignmentWorkbookService:
     return TestAssignmentWorkbookService(_client())
+
+
+def _as_bool(value) -> bool:
+    if isinstance(value, bool):
+        return value
+    return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _ado_error(error: Exception):
@@ -104,6 +111,32 @@ def assignment_workbook():
     )
 
 
+@assignment_workbook_bp.post("/logging-eligibility")
+def logging_eligibility():
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict) or not isinstance(payload.get("rows"), list):
+        return jsonify({"error": "Tracked rows are required."}), 400
+    try:
+        plan_id, suite_id = parse_test_plan_url(payload.get("url"))
+        report = ResultLoggingGuard(_client()).evaluate(
+            plan_id=plan_id,
+            suite_id=suite_id,
+            rows=payload["rows"],
+            result_key=str(payload.get("resultKey") or "").strip(),
+            mode=str(payload.get("mode") or "ado").strip().lower(),
+            allow_duplicate_logging=_as_bool(payload.get("allowDuplicateLogging")),
+        )
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
+    except (RuntimeError, requests.RequestException) as error:
+        if isinstance(error, RuntimeError):
+            return jsonify({"error": "ADO configuration is missing or invalid. Check organization, project and PAT in Setup."}), 400
+        return _ado_error(error)
+    except Exception:
+        return jsonify({"error": "Unable to refresh duplicate-logging eligibility from Azure DevOps."}), 502
+    return jsonify(report)
+
+
 @assignment_workbook_bp.post("/transfer-to-ote")
 def transfer_to_ote():
     ote_file = request.files.get("oteFile")
@@ -117,11 +150,33 @@ def transfer_to_ote():
         if not isinstance(rows, list):
             raise ValueError("Tracked rows are invalid.")
         result_key = str(request.form.get("resultKey", "")).strip()
+        allow_duplicate_logging = _as_bool(request.form.get("allowDuplicateLogging"))
+        guard_report = {"skippedCases": 0, "skippedPoints": 0, "skipped": []}
+
+        if not allow_duplicate_logging:
+            plan_id, suite_id = parse_test_plan_url(request.form.get("url"))
+            rows, guard_report = ResultLoggingGuard(_client()).filter_rows_for_ote(
+                plan_id=plan_id,
+                suite_id=suite_id,
+                rows=rows,
+                result_key=result_key,
+                allow_duplicate_logging=False,
+            )
+            if not guard_report["eligibleCaseIds"]:
+                raise ValueError(
+                    "No Active Azure DevOps Test Cases are eligible to transfer to OTE. "
+                    "Use Allow duplicated logging only when you intentionally want to log completed cases again."
+                )
+
         output, updated_count = TestAssignmentWorkbookService.transfer_to_ote(
             ote_file.read(), rows, result_key
         )
     except (ValueError, json.JSONDecodeError) as error:
         return jsonify({"error": str(error)}), 400
+    except (RuntimeError, requests.RequestException) as error:
+        if isinstance(error, RuntimeError):
+            return jsonify({"error": "ADO configuration is missing or invalid. Check organization, project and PAT in Setup."}), 400
+        return _ado_error(error)
     except Exception:
         return jsonify({"error": "Unable to update the OTE workbook."}), 500
 
@@ -135,6 +190,7 @@ def transfer_to_ote():
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
     response.headers["X-OTE-Updated-Cases"] = str(updated_count)
+    response.headers["X-OTE-Skipped-Cases"] = str(guard_report.get("skippedCases", 0))
     return response
 
 
@@ -148,12 +204,13 @@ def publish_test_run():
 
     try:
         plan_id, suite_id = parse_test_plan_url(payload.get("url"))
-        result = TestRunPublisher(_client()).publish(
+        result = ProtectedTestRunPublisher(_client()).publish(
             plan_id=plan_id,
             suite_id=suite_id,
             rows=payload["rows"],
             result_key=str(payload.get("resultKey") or "").strip(),
             run_name=str(payload.get("runName") or "").strip(),
+            allow_duplicate_logging=_as_bool(payload.get("allowDuplicateLogging")),
         )
     except ValueError as error:
         return jsonify({"error": str(error)}), 400
@@ -164,9 +221,11 @@ def publish_test_run():
     except Exception:
         return jsonify({"error": "Unable to create and publish the Azure DevOps test run."}), 502
 
+    skipped = int(result.get("skippedCases") or 0)
+    skip_text = f" {skipped} case(s) were skipped because their latest ADO status was not Active." if skipped else ""
     return jsonify({
         **result,
         "message": (
-            f"Created ADO Test Run {result['runId']} with {result['publishedPoints']} published test point(s)."
+            f"Created ADO Test Run {result['runId']} with {result['publishedPoints']} published test point(s).{skip_text}"
         ),
     }), 201
