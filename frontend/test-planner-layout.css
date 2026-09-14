@@ -1,0 +1,85 @@
+.planner-table-wrap {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  max-height: min(68vh, 760px);
+  overflow-x: scroll !important;
+  overflow-y: auto !important;
+  scrollbar-gutter: stable;
+  overscroll-behavior: contain;
+}
+
+/* Keep the table wider than the viewport when columns are widened. The wrapper,
+   not the table, owns horizontal scrolling. */
+.planner-table {
+  table-layout: fixed !important;
+  min-width: 0 !important;
+  max-width: none !important;
+}
+
+.planner-table th,
+.planner-table td {
+  min-width: 0;
+  white-space: normal !important;
+  word-break: normal !important;
+  overflow-wrap: anywhere !important;
+  vertical-align: top;
+}
+
+/* Test Case IDs must never turn into one digit per line when a column is narrow. */
+.planner-table th:nth-child(2),
+.planner-table td:nth-child(2) {
+  white-space: nowrap !important;
+  overflow-wrap: normal !important;
+  word-break: keep-all !important;
+}
+
+.planner-table .planner-status {
+  white-space: nowrap !important;
+}
+
+/* Make the resize target the actual trailing edge of each header. */
+.planner-header-row th[data-planner-column] {
+  position: relative;
+}
+
+.planner-header-row th[data-planner-column] > .test-resize-handle.column {
+  right: -4px;
+  top: 0;
+  bottom: 0;
+  width: 9px;
+  border-right: 2px solid var(--border);
+  background: transparent;
+  cursor: col-resize;
+  z-index: 6;
+}
+
+.planner-header-row th[data-planner-column] > .test-resize-handle.column:hover,
+.planner-header-row th[data-planner-column] > .test-resize-handle.column:focus-visible,
+.planner-header-row th[data-planner-column] > .test-resize-handle.column.planner-resizing {
+  border-right-color: var(--accent);
+  background: rgba(23, 104, 209, 0.10);
+  outline: none;
+}
+
+/* Header + filters remain readable while the body scrolls vertically. */
+.planner-table thead .planner-header-row th {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: var(--bg);
+}
+
+.planner-table thead .planner-filter-row th {
+  position: sticky;
+  top: 43px;
+  z-index: 4;
+  background: #fff;
+}
+
+@media (max-width: 700px) {
+  .planner-table-wrap {
+    max-height: 62vh;
+  }
+}
