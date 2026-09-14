@@ -45,3 +45,21 @@ test('Result Tracker uses a paste box instead of TestResult TXT file import', ()
   assert.doesNotMatch(source, /id="importTestResultTxt"/);
   assert.doesNotMatch(source, /id="testResultTxtFile"/);
 });
+
+
+test('Result Tracker adds requested column filters and freezes ID and Title', () => {
+  const source = fs.readFileSync('frontend/result-tracker-grid.js', 'utf8');
+  const css = fs.readFileSync('frontend/result-tracker-grid.css', 'utf8');
+
+  assert.match(source, /Search ID/);
+  assert.match(source, /Search title/);
+  assert.match(source, /Search automation script/);
+  assert.match(source, /Filter Product Area/);
+  assert.match(source, /__EMPTY__/);
+  assert.match(source, /applyFilters/);
+
+  assert.match(css, /nth-child\(1\)/);
+  assert.match(css, /nth-child\(2\)/);
+  assert.match(css, /--assignment-col1-width/);
+  assert.match(css, /position:\s*sticky/);
+});

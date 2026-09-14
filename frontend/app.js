@@ -1,5 +1,6 @@
 const output = document.querySelector('#output');
 const healthBadge = document.querySelector('#healthBadge');
+const healthStatusText = document.querySelector('#healthStatusText');
 const adoConnectionBadge = document.querySelector('#adoConnectionBadge');
 const setupStatus = document.querySelector('#setupStatus');
 const readIds = document.querySelector('#readIds');
@@ -101,11 +102,16 @@ async function api(path, options = {}) {
 
 async function checkHealth() {
   try {
-    await api('/api/health');
-    healthBadge.textContent = 'Backend ready';
+    const response = await fetch('/api/health', { cache: 'no-store' });
+    if (!response.ok) throw new Error('Health check failed');
+    const data = await response.json().catch(() => ({}));
+    if (data.status !== 'ok') throw new Error('Backend is not ready');
+    healthStatusText.textContent = 'App is running';
+    healthBadge.classList.remove('checking', 'error');
     healthBadge.classList.add('ok');
   } catch (error) {
-    healthBadge.textContent = 'Backend offline';
+    healthStatusText.textContent = 'App is stopped';
+    healthBadge.classList.remove('checking', 'ok');
     healthBadge.classList.add('error');
   }
 }
@@ -277,6 +283,7 @@ chatForm.addEventListener('submit', async (event) => {
 });
 
 checkHealth();
+window.setInterval(checkHealth, 2000);
 checkSetup();
 
 // Test Plan / Suite is independent of the work-item tabs and their output.

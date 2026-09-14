@@ -19,7 +19,10 @@
     </div>
     <div class="status-row">
       <span id="adoConnectionBadge" class="status-badge">ADO not checked</span>
-      <span id="healthBadge" class="status-badge">Checking backend</span>
+      <span id="healthBadge" class="status-badge backend-status checking" role="status" aria-live="polite">
+        <span class="backend-status-dot" aria-hidden="true"></span>
+        <span id="healthStatusText">Checking app…</span>
+      </span>
     </div>
   </header>
 
