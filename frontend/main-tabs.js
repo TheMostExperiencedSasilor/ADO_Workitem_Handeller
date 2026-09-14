@@ -123,6 +123,7 @@
     const styles = [
       ['test-planner.css', 'test-planner-style'],
       ['test-planner-enhancements.css', 'test-planner-enhancements-style'],
+      ['test-planner-layout.css', 'test-planner-layout-style'],
     ];
 
     for (const [href, marker] of styles) {
@@ -138,6 +139,7 @@
       ['test-results-summary.js', 'test-summary-script'],
       ['test-planner.js', 'test-planner-script'],
       ['test-planner-enhancements.js', 'test-planner-enhancements-script'],
+      ['test-planner-layout.js', 'test-planner-layout-script'],
     ];
 
     for (const [src, marker] of scripts) {
