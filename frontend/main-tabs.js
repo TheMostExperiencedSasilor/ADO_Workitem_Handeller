@@ -140,6 +140,7 @@
       ['test-planner.js', 'test-planner-script'],
       ['test-planner-enhancements.js', 'test-planner-enhancements-script'],
       ['test-planner-layout.js', 'test-planner-layout-script'],
+      ['ote-transfer.js', 'ote-transfer-script'],
     ];
 
     for (const [src, marker] of scripts) {
