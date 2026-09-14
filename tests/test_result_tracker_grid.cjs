@@ -21,7 +21,7 @@ test('parses Result CSV by Test ID and Result', () => {
   ]);
 });
 
-test('parses TestResult TXT VSTS rows and ignores group rows', () => {
+test('parses pasted TestResult VSTS rows and ignores group rows', () => {
   const utils = loadUtils();
   const rows = utils.parseTestResultTxt('Test\tDuration\nClass: Sample Passed Stale\nVSTS24153 Passed Stale\t5.5 min\nVSTS24846 Failed Stale\t4.7 min\n');
   assert.deepEqual(JSON.parse(JSON.stringify(rows)), [
@@ -35,4 +35,13 @@ test('Passed wins when imported sources disagree', () => {
   assert.equal(utils.mergeResult('Passed', 'Failed'), 'Passed');
   assert.equal(utils.mergeResult('Failed', 'Passed'), 'Passed');
   assert.equal(utils.mergeResult('', 'Failed'), 'Failed');
+});
+
+test('Result Tracker uses a paste box instead of TestResult TXT file import', () => {
+  const source = fs.readFileSync('frontend/result-tracker-grid.js', 'utf8');
+  assert.match(source, /id="testResultPaste"/);
+  assert.match(source, /Apply Pasted Results/);
+  assert.match(source, /parseTestResultTxt\(pasteInput\.value\)/);
+  assert.doesNotMatch(source, /id="importTestResultTxt"/);
+  assert.doesNotMatch(source, /id="testResultTxtFile"/);
 });
