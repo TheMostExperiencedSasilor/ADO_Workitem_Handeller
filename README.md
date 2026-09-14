@@ -21,21 +21,11 @@ A lightweight Python + HTML/CSS/JavaScript assistant for reading Azure DevOps wo
 ```text
 ADO_Workitem_Handeller/
 ├── backend/
-│   ├── app.py
-│   ├── config.py
-│   ├── requirements.txt
-│   └── .env.example
 ├── frontend/
-│   ├── index.html
-│   ├── styles.css
-│   └── app.js
 ├── launcher/
-│   ├── Start-App.vbs
-│   ├── Start-App.bat
-│   ├── Stop-App.vbs
-│   ├── Stop-App.bat
-│   ├── Start-App.sh
-│   └── Start-App.command
+│   ├── Start-Windows.vbs
+│   ├── Start-Unix.command
+│   └── Start-Linux.sh
 ├── docs/
 ├── tests/
 ├── start_app.py
@@ -43,85 +33,73 @@ ADO_Workitem_Handeller/
 └── README.md
 ```
 
-## One-click start — Go Live style
+## One-click start — one launcher per platform
 
-Install Python 3.10 or newer once. The launcher uses the cross-platform
-`start_app.py` bootstrapper, which creates `backend/.venv`, installs dependencies
-on the first run (and when `requirements.txt` changes), starts the Flask backend
-as a detached background process, waits until `/api/health` is ready, and opens
-the configured localhost URL in your default browser.
+There are now exactly **three user-facing launchers**: one for Windows, one for
+macOS/Unix, and one for Linux. All three do the same job:
 
-Once the app is running, the launcher exits. There is no terminal window that
-must remain open.
+```text
+one click -> ensure Python environment -> start/reuse detached backend
+          -> wait for /api/health -> open localhost -> launcher exits
+```
+
+The backend keeps running after the launcher exits. If it is already running,
+using the launcher again simply opens the existing localhost app instead of
+starting a duplicate process.
 
 ### Windows
-
-For the normal no-console experience, double-click:
-
-```text
-launcher/Start-App.vbs
-```
-
-This behaves like a small **Go Live** button:
-
-```text
-one click -> start background backend -> wait for health -> open localhost
-```
-
-If the backend is already running, clicking `Start-App.vbs` again simply opens
-the existing localhost app instead of starting a duplicate process.
-
-To stop the background backend, double-click:
-
-```text
-launcher/Stop-App.vbs
-```
-
-`Start-App.bat` and `Stop-App.bat` remain available for troubleshooting from a
-Command Prompt, but they are no longer required to stay open.
-
-### macOS
 
 Double-click:
 
 ```text
-launcher/Start-App.command
+launcher/Start-Windows.vbs
 ```
 
-You can also run the Unix launcher from Terminal:
+This launcher calls Python directly and **does not go through a BAT file**.
+It prefers `pythonw.exe`, so Command Prompt / Windows Terminal should not appear.
+First-run dependency installation is also launched with the Windows
+`CREATE_NO_WINDOW` flag.
 
-```bash
-./launcher/Start-App.sh
+### macOS / Unix
+
+Double-click:
+
+```text
+launcher/Start-Unix.command
 ```
 
-The bootstrapper returns after the detached backend is ready, so the shell is not
-the lifetime owner of the web server.
+It starts the same `start_app.py` bootstrapper and returns after the detached
+backend is healthy and localhost has opened.
 
-### Linux / other Unix systems
+### Linux
 
 Run:
 
 ```bash
-./launcher/Start-App.sh
+./launcher/Start-Linux.sh
 ```
 
-If executable permissions were removed while copying the files, restore them once:
+If executable permissions were removed while copying the repository, restore
+them once:
 
 ```bash
-chmod +x launcher/Start-App.sh launcher/Start-App.command
+chmod +x launcher/Start-Unix.command launcher/Start-Linux.sh
 ```
 
-An internet connection is needed for dependency installation. Later launches reuse
-the existing environment. Enter your organization, project and PAT in the existing
-**Setup** section. Saved settings are preserved.
-
-The launcher uses the configured host/port (default `http://127.0.0.1:5000`) and
-runs without Flask's debug reloader. Runtime state is stored under `.runtime/` and
-server/launcher diagnostics are written to:
+The configured host/port is respected; the default is
+`http://127.0.0.1:5000`. Runtime state is stored under `.runtime/` and logs
+are written to:
 
 ```text
 logs/backend.log
 logs/launcher.log
+```
+
+For troubleshooting or an explicit manual stop, the shared bootstrapper is still
+available directly:
+
+```text
+python start_app.py --stop
 ```
 
 ## Quick Start
