@@ -120,23 +120,31 @@
   }
 
   function loadWorkspaceAssets() {
-    if (!document.querySelector('link[data-test-planner-style]')) {
+    const styles = [
+      ['test-planner.css', 'test-planner-style'],
+      ['test-planner-enhancements.css', 'test-planner-enhancements-style'],
+    ];
+
+    for (const [href, marker] of styles) {
+      if (document.querySelector(`link[data-${marker}]`)) continue;
       const style = document.createElement('link');
       style.rel = 'stylesheet';
-      style.href = 'test-planner.css';
-      style.dataset.testPlannerStyle = '1';
+      style.href = href;
+      style.dataset[marker.replace(/-([a-z])/g, (_, char) => char.toUpperCase())] = '1';
       document.head.appendChild(style);
     }
 
     const scripts = [
       ['test-results-summary.js', 'test-summary-script'],
       ['test-planner.js', 'test-planner-script'],
+      ['test-planner-enhancements.js', 'test-planner-enhancements-script'],
     ];
 
     for (const [src, marker] of scripts) {
       if (document.querySelector(`script[data-${marker}]`)) continue;
       const script = document.createElement('script');
       script.src = src;
+      script.async = false;
       script.dataset[marker.replace(/-([a-z])/g, (_, char) => char.toUpperCase())] = '1';
       document.body.appendChild(script);
     }
