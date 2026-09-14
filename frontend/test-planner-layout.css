@@ -3,83 +3,115 @@
   width: 100%;
   max-width: 100%;
   min-width: 0;
-  max-height: min(68vh, 760px);
+  max-height: min(62vh, 680px);
   overflow-x: scroll !important;
   overflow-y: auto !important;
   scrollbar-gutter: stable;
   overscroll-behavior: contain;
+  border: 1px solid var(--border);
+  border-radius: 6px;
 }
 
-/* Keep the table wider than the viewport when columns are widened. The wrapper,
-   not the table, owns horizontal scrolling. */
+/* The table owns its explicit pixel width. When a column grows, the wrapper
+   scrolls horizontally instead of squeezing another column. */
 .planner-table {
   table-layout: fixed !important;
   min-width: 0 !important;
-  max-width: none !important;
+  border-collapse: separate;
+  border-spacing: 0;
 }
 
 .planner-table th,
 .planner-table td {
-  min-width: 0;
+  box-sizing: border-box;
   white-space: normal !important;
   word-break: normal !important;
   overflow-wrap: anywhere !important;
   vertical-align: top;
 }
 
-/* Test Case IDs must never turn into one digit per line when a column is narrow. */
+/* Automatic Wrap Text for long planner content. */
+.planner-table td:nth-child(3),
+.planner-table td:nth-child(5),
+.planner-table td:nth-child(6),
+.planner-table th:nth-child(3),
+.planner-table th:nth-child(5),
+.planner-table th:nth-child(6) {
+  white-space: normal !important;
+  overflow-wrap: anywhere !important;
+}
+
+/* Test Case ID and Status should never wrap or collapse digit-by-digit. */
 .planner-table th:nth-child(2),
-.planner-table td:nth-child(2) {
+.planner-table td:nth-child(2),
+.planner-table th:nth-child(4),
+.planner-table td:nth-child(4),
+.planner-table .planner-status {
   white-space: nowrap !important;
   overflow-wrap: normal !important;
   word-break: keep-all !important;
 }
 
-.planner-table .planner-status {
-  white-space: nowrap !important;
+.planner-filter-row input,
+.planner-filter-row select {
+  width: 100%;
+  min-width: 0;
 }
 
-/* Make the resize target the actual trailing edge of each header. */
+/* A larger hit area on the real trailing edge of every header. */
 .planner-header-row th[data-planner-column] {
-  position: relative;
+  position: sticky;
 }
 
 .planner-header-row th[data-planner-column] > .test-resize-handle.column {
-  right: -4px;
+  position: absolute;
+  right: -5px;
   top: 0;
   bottom: 0;
-  width: 9px;
+  width: 11px;
+  cursor: col-resize;
+  touch-action: none;
+  z-index: 12;
   border-right: 2px solid var(--border);
   background: transparent;
-  cursor: col-resize;
-  z-index: 6;
 }
 
 .planner-header-row th[data-planner-column] > .test-resize-handle.column:hover,
 .planner-header-row th[data-planner-column] > .test-resize-handle.column:focus-visible,
 .planner-header-row th[data-planner-column] > .test-resize-handle.column.planner-resizing {
   border-right-color: var(--accent);
-  background: rgba(23, 104, 209, 0.10);
+  background: rgba(23, 104, 209, 0.12);
   outline: none;
 }
 
-/* Header + filters remain readable while the body scrolls vertically. */
+/* Keep the two header rows frozen while vertically scrolling the suite. */
 .planner-table thead .planner-header-row th {
   position: sticky;
   top: 0;
-  z-index: 5;
+  z-index: 10;
   background: var(--bg);
 }
 
 .planner-table thead .planner-filter-row th {
   position: sticky;
   top: 43px;
-  z-index: 4;
+  z-index: 9;
   background: #fff;
+}
+
+/* The hidden checkbox column must not steal width from Test Case ID. */
+.planner-table:not(.selection-mode) .planner-selection-col,
+.planner-table:not(.selection-mode) .planner-selection-cell {
+  width: 0 !important;
+  min-width: 0 !important;
+  max-width: 0 !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  border: 0 !important;
 }
 
 @media (max-width: 700px) {
   .planner-table-wrap {
-    max-height: 62vh;
+    max-height: 54vh;
   }
 }
