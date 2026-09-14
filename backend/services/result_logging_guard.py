@@ -8,13 +8,15 @@ RESULT_KEYS = {"round1Results", "round2Results", "singleRunResults", "manualRun"
 
 
 def _point_status(point: dict[str, Any]) -> str:
-    raw = str((point.get("results") or {}).get("outcome") or "").strip().lower()
-    normalized = raw.replace("_", "").replace(" ", "")
+    raw = str((point.get("results") or {}).get("outcome") or "").strip()
+    normalized = raw.lower().replace("_", "").replace(" ", "")
     if normalized == "passed":
         return "Passed"
     if normalized == "failed":
         return "Failed"
-    return "Active"
+    if normalized in {"", "none", "unspecified", "notexecuted", "notrun", "active"}:
+        return "Active"
+    return raw or "Unknown"
 
 
 def _point_id(point: dict[str, Any]) -> int | None:
