@@ -84,3 +84,60 @@
 @media (max-width: 900px) {
   .assignment-import-top { grid-template-columns: 1fr; }
 }
+
+
+/* Result Tracker column filters + frozen ID/Title columns */
+.assignment-preview-table thead tr:first-child th {
+  top: 0;
+}
+.assignment-preview-table .assignment-filter-row th {
+  top: var(--assignment-header-row-height, 42px);
+  z-index: 4;
+  padding: 5px 6px;
+  background: #fff;
+}
+.assignment-column-filter {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  height: 30px;
+  padding: 4px 7px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: #fff;
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+}
+.assignment-column-filter:focus {
+  outline: 2px solid rgba(23, 104, 209, 0.18);
+  border-color: var(--accent);
+}
+.assignment-preview-table th:nth-child(1),
+.assignment-preview-table td:nth-child(1) {
+  position: sticky;
+  left: 0;
+}
+.assignment-preview-table th:nth-child(2),
+.assignment-preview-table td:nth-child(2) {
+  position: sticky;
+  left: var(--assignment-col1-width, 100px);
+}
+.assignment-preview-table tbody td:nth-child(1),
+.assignment-preview-table tbody td:nth-child(2) {
+  z-index: 2;
+  background: #fff;
+}
+.assignment-preview-table thead tr:first-child th:nth-child(1),
+.assignment-preview-table thead tr:first-child th:nth-child(2) {
+  z-index: 7;
+  background: #fff;
+}
+.assignment-preview-table .assignment-filter-row th:nth-child(1),
+.assignment-preview-table .assignment-filter-row th:nth-child(2) {
+  z-index: 8;
+}
+.assignment-preview-table th:nth-child(2),
+.assignment-preview-table td:nth-child(2) {
+  box-shadow: 2px 0 3px rgba(0, 0, 0, 0.08);
+}
