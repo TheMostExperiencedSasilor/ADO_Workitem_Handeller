@@ -1,0 +1,67 @@
+.planner-table-wrap {
+  width: 100%;
+  max-width: 100%;
+  max-height: min(68vh, 760px);
+  overflow: auto !important;
+  scrollbar-gutter: stable both-edges;
+  overscroll-behavior: contain;
+}
+
+.planner-table {
+  min-width: max-content;
+}
+
+#plannerFilterProductAreaDropdown,
+#plannerFilterTesterDropdown {
+  width: 100%;
+  min-width: 0;
+  padding: 7px 8px;
+  font-size: 13px;
+}
+
+.planner-status::before {
+  width: 1em !important;
+  height: 1em !important;
+  flex: 0 0 1em !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1;
+  text-align: center;
+}
+
+.planner-status.active {
+  color: #1769d2;
+}
+
+.planner-status.active::before {
+  content: '●';
+}
+
+.planner-status.passed {
+  color: #168447;
+}
+
+.planner-status.passed::before {
+  content: '✓';
+}
+
+.planner-status.failed {
+  color: #c62828;
+}
+
+.planner-status.failed::before {
+  content: '✕';
+}
+
+.playlist-preview-variant {
+  width: min(360px, 100%);
+  margin: 8px 0 4px;
+}
+
+@media (max-width: 700px) {
+  .planner-table-wrap {
+    max-height: 62vh;
+  }
+}
