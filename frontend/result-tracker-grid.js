@@ -131,20 +131,76 @@
   });
 
   const host=document.createElement('div'); host.className='assignment-import-row';
-  host.innerHTML='<div><label for="importResultTarget">Import into</label><select id="importResultTarget"><option value="0">Round 1 results</option><option value="1">Round 2 results</option><option value="2">Single run results</option><option value="3">Manual run</option></select></div><div class="assignment-import-actions"><button id="importResultCsv" type="button" class="secondary-button">Import Result CSV</button><button id="importTestResultTxt" type="button" class="secondary-button">Import TestResult TXT</button><input id="resultCsvFile" type="file" accept=".csv,text/csv" hidden><input id="testResultTxtFile" type="file" accept=".txt,text/plain" hidden></div><p class="assignment-import-hint">Matches VSTS/Test ID to the tracker. If sources disagree, Passed wins over Failed.</p>';
+  host.innerHTML=`
+    <div class="assignment-import-top">
+      <div>
+        <label for="importResultTarget">Import into</label>
+        <select id="importResultTarget">
+          <option value="0">Round 1 results</option>
+          <option value="1">Round 2 results</option>
+          <option value="2">Single run results</option>
+          <option value="3">Manual run</option>
+        </select>
+      </div>
+      <div class="assignment-import-actions">
+        <button id="importResultCsv" type="button" class="secondary-button">Import Result CSV</button>
+        <input id="resultCsvFile" type="file" accept=".csv,text/csv" hidden>
+      </div>
+      <p class="assignment-import-hint">Matches VSTS/Test ID to the tracker. If sources disagree, Passed wins over Failed.</p>
+    </div>
+    <div class="assignment-paste-import">
+      <label for="testResultPaste">Paste TestResult output</label>
+      <textarea id="testResultPaste" rows="4" spellcheck="false" placeholder="Paste runner output here, e.g. VSTS24153 Passed Stale"></textarea>
+      <div class="assignment-import-actions">
+        <button id="applyPastedResults" type="button" class="secondary-button" disabled>Apply Pasted Results</button>
+        <button id="clearPastedResults" type="button" class="secondary-button" disabled>Clear</button>
+      </div>
+    </div>`;
   const firstActions=section.querySelector('.action-row'); firstActions.after(host);
-  const target=host.querySelector('#importResultTarget'), csvBtn=host.querySelector('#importResultCsv'), txtBtn=host.querySelector('#importTestResultTxt'), csvInput=host.querySelector('#resultCsvFile'), txtInput=host.querySelector('#testResultTxtFile');
+  const target=host.querySelector('#importResultTarget');
+  const csvBtn=host.querySelector('#importResultCsv');
+  const csvInput=host.querySelector('#resultCsvFile');
+  const pasteInput=host.querySelector('#testResultPaste');
+  const applyPasteBtn=host.querySelector('#applyPastedResults');
+  const clearPasteBtn=host.querySelector('#clearPastedResults');
 
   const importEntries=(entries,name)=>{
     const c=Number(target.value), rows=[...body.rows], byId=new Map(rows.map((tr)=>[String(tr.cells[0]?.textContent||'').trim(),tr]));
-    let matched=0,changed=0;
-    entries.forEach((entry)=>{const tr=byId.get(String(entry.testCaseId)); if(!tr)return; matched++; const cell=tr.cells[editableOffset+c], control=cell?.querySelector('select'); if(!control)return; const next=mergeResult(control.value,entry.result); if(control.value!==next){control.value=next;control.dispatchEvent(new Event('change',{bubbles:true}));changed++;}});
-    const s=document.querySelector('#assignmentWorkbookStatus'); if(s) s.textContent=name+': matched '+matched+' case(s), updated '+changed+' cell(s) in '+target.options[target.selectedIndex].text+'.';
+    const matchedIds=new Set(), changedIds=new Set(), unmatchedIds=new Set();
+    entries.forEach((entry)=>{
+      const id=String(entry.testCaseId);
+      const tr=byId.get(id);
+      if(!tr){ unmatchedIds.add(id); return; }
+      matchedIds.add(id);
+      const cell=tr.cells[editableOffset+c], control=cell?.querySelector('select'); if(!control)return;
+      const next=mergeResult(control.value,entry.result);
+      if(control.value!==next){control.value=next;control.dispatchEvent(new Event('change',{bubbles:true}));changedIds.add(id);}
+    });
+    const s=document.querySelector('#assignmentWorkbookStatus');
+    if(s) {
+      const unmatchedText=unmatchedIds.size ? `, ${unmatchedIds.size} not found` : '';
+      s.textContent=`${name}: parsed ${entries.length} result row(s), matched ${matchedIds.size} case(s), updated ${changedIds.size} cell(s)${unmatchedText} in ${target.options[target.selectedIndex].text}.`;
+    }
   };
-  const syncImportButtons=()=>{ const enabled=body.rows.length>0; csvBtn.disabled=!enabled; txtBtn.disabled=!enabled; };
+  const syncImportButtons=()=>{
+    const trackerReady=body.rows.length>0;
+    const hasPaste=Boolean(pasteInput.value.trim());
+    csvBtn.disabled=!trackerReady;
+    applyPasteBtn.disabled=!trackerReady || !hasPaste;
+    clearPasteBtn.disabled=!pasteInput.value;
+  };
   new MutationObserver(syncImportButtons).observe(body,{childList:true});
+  pasteInput.addEventListener('input',syncImportButtons);
   syncImportButtons();
-  csvBtn.onclick=()=>csvInput.click(); txtBtn.onclick=()=>txtInput.click();
+
+  csvBtn.onclick=()=>csvInput.click();
   csvInput.onchange=async()=>{const f=csvInput.files?.[0]; if(!f)return; try{importEntries(parseResultCsv(await f.text()),f.name);}catch(err){const s=document.querySelector('#assignmentWorkbookStatus');if(s)s.textContent=err.message;}finally{csvInput.value='';}};
-  txtInput.onchange=async()=>{const f=txtInput.files?.[0]; if(!f)return; try{importEntries(parseTestResultTxt(await f.text()),f.name);}catch(err){const s=document.querySelector('#assignmentWorkbookStatus');if(s)s.textContent=err.message;}finally{txtInput.value='';}};
+  applyPasteBtn.onclick=()=>{
+    try{
+      const entries=parseTestResultTxt(pasteInput.value);
+      if(!entries.length) throw new Error('No VSTS TestResult rows were found in the pasted text.');
+      importEntries(entries,'Pasted TestResult');
+    }catch(err){const s=document.querySelector('#assignmentWorkbookStatus');if(s)s.textContent=err.message;}
+  };
+  clearPasteBtn.onclick=()=>{pasteInput.value='';syncImportButtons();pasteInput.focus();};
 })();
