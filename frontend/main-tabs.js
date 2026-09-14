@@ -10,7 +10,7 @@
     'Output',
   ];
 
-  const DEFAULT_TAB_INDEX = 1;
+  const DEFAULT_TAB_INDEX = 0;
 
   function initializeMainTabs() {
     const layout = document.querySelector('main.layout');
