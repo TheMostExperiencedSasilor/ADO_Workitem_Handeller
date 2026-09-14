@@ -16,36 +16,30 @@
     const selectionWidth = () => table.classList.contains('selection-mode') ? 46 : 0;
     const clampWidth = (index, value) => Math.max(MIN_WIDTHS[index] || 80, Math.round(value));
 
+    const setExactWidth = (element, width) => {
+      if (!element) return;
+      const cssWidth = `${width}px`;
+      element.style.width = cssWidth;
+      element.style.minWidth = cssWidth;
+      element.style.maxWidth = cssWidth;
+    };
+
     const applyWidths = () => {
       const cols = [...colgroup.children];
       const selectWidth = selectionWidth();
 
-      if (cols[0]) {
-        cols[0].style.width = `${selectWidth}px`;
-        cols[0].style.minWidth = `${selectWidth}px`;
-        cols[0].style.maxWidth = `${selectWidth}px`;
-      }
+      setExactWidth(cols[0], selectWidth);
+      table.querySelectorAll('.planner-selection-cell').forEach((cell) => setExactWidth(cell, selectWidth));
 
       widths.forEach((value, index) => {
         const width = clampWidth(index, value);
         widths[index] = width;
-        const cssWidth = `${width}px`;
-        const col = cols[index + 1];
-        if (col) {
-          col.style.width = cssWidth;
-          col.style.minWidth = cssWidth;
-          col.style.maxWidth = cssWidth;
-        }
+        setExactWidth(cols[index + 1], width);
 
-        // Apply the width to every real cell as well as the <col>. This avoids
-        // browsers collapsing the Test Case ID column when the selection column
-        // is hidden and makes the header edge match the body edge exactly.
+        // Selection is always kept as a real first table column, even when its
+        // contents are hidden. Therefore planner column N is always nth-child N+2.
         const position = index + 2;
-        table.querySelectorAll(`tr > :nth-child(${position})`).forEach((cell) => {
-          cell.style.width = cssWidth;
-          cell.style.minWidth = cssWidth;
-          cell.style.maxWidth = cssWidth;
-        });
+        table.querySelectorAll(`tr > :nth-child(${position})`).forEach((cell) => setExactWidth(cell, width));
       });
 
       const total = widths.reduce((sum, width) => sum + width, 0) + selectWidth;
@@ -64,10 +58,6 @@
         const index = Number(header.dataset.plannerColumn);
         if (!Number.isInteger(index) || index < 0 || index >= widths.length) return;
 
-        // Capture on the handle itself. The planner's older resize listener is a
-        // bubble listener on this same element; stopping it here prevents two
-        // resize implementations from fighting each other, while pointer capture
-        // remains valid because the handle is the actual pointer target.
         handle.addEventListener('pointerdown', (event) => {
           if (event.button !== 0) return;
           event.preventDefault();
