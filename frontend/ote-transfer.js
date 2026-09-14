@@ -250,6 +250,14 @@
     if (clearAllButton) clearAllButton.insertAdjacentElement('beforebegin', duplicateControl);
     else createRunButton.insertAdjacentElement('afterend', duplicateControl);
 
+    const adoRunPreview = document.querySelector('#adoRunPreview');
+    const adoGuardPreview = document.createElement('p');
+    adoGuardPreview.id = 'adoRunGuardPreview';
+    adoGuardPreview.className = 'mini-status';
+    adoGuardPreview.setAttribute('role', 'status');
+    adoGuardPreview.setAttribute('aria-live', 'polite');
+    adoRunPreview?.insertAdjacentElement('afterend', adoGuardPreview);
+
     const originalFetch = window.fetch.bind(window);
     window.fetch = async (input, init = {}) => {
       const url = typeof input === 'string' ? input : input?.url || '';
@@ -314,6 +322,10 @@
       status.textContent = 'Updating suite membership, case details and current ADO state…';
       readButton.click();
       await waitForReadToFinish();
+      if (status.classList.contains('error')) {
+        updateButton.disabled = rowsBody.rows.length === 0;
+        return;
+      }
       const afterIds = new Set([...rowsBody.rows].map((row) => String(row.cells[0]?.textContent || '').trim()).filter(Boolean));
       const added = [...afterIds].filter((id) => !beforeIds.has(id)).length;
       const removed = [...beforeIds].filter((id) => !afterIds.has(id)).length;
@@ -332,20 +344,22 @@
     const refreshEligibility = async (mode) => {
       const isAdo = mode === 'ado';
       const resultSelect = document.querySelector(isAdo ? '#adoRunResultKey' : '#oteResultKey');
-      const preview = document.querySelector(isAdo ? '#adoRunPreview' : '#oteTransferGuardPreview');
+      const preview = document.querySelector(isAdo ? '#adoRunGuardPreview' : '#oteTransferGuardPreview');
       if (!resultSelect || !preview) return;
+      preview.classList.remove('error', 'duplicate-logging-warning');
       if (allowDuplicate.checked) {
         preview.textContent = 'Duplicate protection is disabled: completed ADO cases may be logged again.';
         preview.classList.add('duplicate-logging-warning');
         return;
       }
-      preview.classList.remove('duplicate-logging-warning');
       const key = resultSelect.value;
       const cellIndex = { round1Results: 4, round2Results: 5, singleRunResults: 6, manualRun: 7 }[key];
       const rows = collectLoggedRows(key, cellIndex);
-      if (!rows.length) return;
-      const existingText = isAdo ? preview.textContent : '';
-      if (!isAdo) preview.textContent = 'Checking latest ADO status…';
+      if (!rows.length) {
+        preview.textContent = '';
+        return;
+      }
+      preview.textContent = 'Checking latest ADO status…';
       try {
         const response = await originalFetch('/api/test-plans/logging-eligibility', {
           method: 'POST',
@@ -362,11 +376,9 @@
         if (!response.ok) throw new Error(data.error || `Request failed: ${response.status}`);
         const eligible = Array.isArray(data.eligibleCaseIds) ? data.eligibleCaseIds.length : 0;
         const skipped = Number(data.skippedCases || 0);
-        const guardText = `Latest ADO check: ${eligible} case(s) eligible${skipped ? ` · ${skipped} case(s) fully/partly skipped because status is not Active` : ' · no duplicates detected'}.`;
-        preview.textContent = isAdo && existingText ? `${existingText} ${guardText}` : guardText;
+        preview.textContent = `Latest ADO check: ${eligible} case(s) eligible${skipped ? ` · ${skipped} case(s) fully/partly skipped because status is not Active` : ' · no duplicates detected'}.`;
       } catch (error) {
-        const message = `Could not refresh duplicate check: ${error.message || 'ADO unavailable'}`;
-        preview.textContent = isAdo && existingText ? `${existingText} ${message}` : message;
+        preview.textContent = `Could not refresh duplicate check: ${error.message || 'ADO unavailable'}`;
         preview.classList.add('error');
       }
     };
