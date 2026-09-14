@@ -63,6 +63,23 @@ def test_ote_guard_skips_case_when_any_relevant_point_is_completed():
     assert report["skippedCases"] == 1
 
 
+def test_completed_non_pass_fail_outcome_is_not_treated_as_active():
+    guard = ResultLoggingGuard(FakeClient([
+        point(251, 2501, "blocked"),
+        point(252, 2502, "notApplicable"),
+    ]))
+    rows = [
+        {"testCaseId": 2501, "testPointIds": [251], "round1Results": "Passed"},
+        {"testCaseId": 2502, "testPointIds": [252], "round1Results": "Passed"},
+    ]
+
+    filtered, report = guard.filter_rows_for_ado(1, 2, rows, "round1Results")
+
+    assert not [row for row in filtered if row.get("round1Results")]
+    assert report["eligiblePointIds"] == []
+    assert report["skippedPoints"] == 2
+
+
 def test_allow_duplicate_logging_bypasses_status_filter():
     guard = ResultLoggingGuard(FakeClient([point(301, 3001, "passed")]))
     rows = [{"testCaseId": 3001, "testPointIds": [301], "round1Results": "Passed"}]
