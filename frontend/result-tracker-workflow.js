@@ -113,7 +113,9 @@
     const syncProxyStates = () => {
       saveProxy.disabled = saveButton.disabled;
       openProxy.disabled = openButton.disabled;
-      visibleUpdateButton.disabled = originalReadButton.disabled || updateButton.disabled;
+      visibleUpdateButton.disabled = rowsBody.rows.length
+        ? (originalReadButton.disabled || updateButton.disabled)
+        : originalReadButton.disabled;
     };
     new MutationObserver(syncProxyStates).observe(section, {
       subtree: true,
