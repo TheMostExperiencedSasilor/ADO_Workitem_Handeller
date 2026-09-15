@@ -38,6 +38,13 @@ test('result checker locks cells after the first Passed without deleting values'
   assert.doesNotMatch(source, /select\.value\s*=\s*['"]Not Required['"]/);
 });
 
+test('proxy-state observer cannot observe and retrigger its own disabled writes', () => {
+  assert.match(source, /setDisabledIfChanged/);
+  assert.match(source, /proxyStateObserver\.observe\(control/);
+  assert.match(source, /\[originalReadButton, updateButton, saveButton, openButton\]/);
+  assert.doesNotMatch(source, /MutationObserver\(syncProxyStates\)\.observe\(section/);
+});
+
 test('workflow assets are loaded by the Test Results workspace', () => {
   assert.match(tabs, /result-tracker-workflow\.css/);
   assert.match(tabs, /result-tracker-workflow\.js/);
