@@ -7,25 +7,24 @@ Set fso = CreateObject("Scripting.FileSystemObject")
 scriptDir = fso.GetParentFolderName(WScript.ScriptFullName)
 rootDir = fso.GetParentFolderName(scriptDir)
 
-' Prefer pythonw from the app virtual environment so Windows never creates a
-' Command Prompt / Windows Terminal window.
+' Normal path after the first successful setup: use the virtual environment's
+' pythonw.exe so Windows cannot create a Command Prompt / Windows Terminal host.
 launcher = rootDir & "\backend\.venv\Scripts\pythonw.exe"
 
 If fso.FileExists(launcher) Then
   command = Chr(34) & launcher & Chr(34) & " " & Chr(34) & rootDir & "\start_app.py" & Chr(34)
   exitCode = shell.Run(command, 0, True)
 Else
-  ' First run: try Python's windowless launcher, then fall back to a hidden
-  ' console Python process if pyw/pythonw is not available on PATH.
+  ' First run must also stay windowless. Only use windowless Python launchers;
+  ' do NOT fall back to py.exe/python.exe because Windows Terminal may appear
+  ' and become the lifetime owner of the app.
   exitCode = RunCandidate(shell, "pyw.exe -3", rootDir)
   If exitCode = 9009 Then exitCode = RunCandidate(shell, "pythonw.exe", rootDir)
-  If exitCode = 9009 Then exitCode = RunCandidate(shell, "py.exe -3", rootDir)
-  If exitCode = 9009 Then exitCode = RunCandidate(shell, "python.exe", rootDir)
 End If
 
 If exitCode <> 0 Then
-  MsgBox "ADO Work Item AI Assistant could not start." & vbCrLf & vbCrLf & _
-         "Python 3.10+ is required. See logs\launcher.log and logs\backend.log for details.", _
+  MsgBox "ADO Work Item AI Assistant could not start without a console window." & vbCrLf & vbCrLf & _
+         "Python 3.10+ with pythonw/pyw is required. See logs\launcher.log and logs\backend.log for details.", _
          vbExclamation, "ADO Work Item AI Assistant"
 End If
 
