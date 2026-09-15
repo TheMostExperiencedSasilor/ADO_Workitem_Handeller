@@ -124,6 +124,7 @@
       ['test-planner.css', 'test-planner-style'],
       ['test-planner-enhancements.css', 'test-planner-enhancements-style'],
       ['test-planner-layout.css', 'test-planner-layout-style'],
+      ['result-tracker-workflow.css', 'result-tracker-workflow-style'],
     ];
 
     for (const [href, marker] of styles) {
@@ -141,6 +142,7 @@
       ['test-planner-enhancements.js', 'test-planner-enhancements-script'],
       ['test-planner-layout.js', 'test-planner-layout-script'],
       ['ote-transfer.js', 'ote-transfer-script'],
+      ['result-tracker-workflow.js', 'result-tracker-workflow-script'],
     ];
 
     for (const [src, marker] of scripts) {
