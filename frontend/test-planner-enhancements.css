@@ -60,20 +60,14 @@
   margin: 8px 0 4px;
 }
 
-/* Make selection mode unmistakable once Select Test Cases is enabled. */
+/* Keep the button label unchanged; use colour + bold text to show selection mode. */
 #plannerSelectModeButton[aria-pressed="true"] {
   background: var(--accent) !important;
   border-color: var(--accent) !important;
   color: #fff !important;
-  box-shadow: 0 0 0 3px rgba(23, 105, 210, 0.18), 0 3px 8px rgba(15, 23, 42, 0.16);
+  box-shadow: 0 0 0 3px rgba(23, 105, 210, 0.14);
   outline: none !important;
-  font-size: 0;
   font-weight: 700;
-}
-
-#plannerSelectModeButton[aria-pressed="true"]::after {
-  content: '✓ Selecting Test Cases';
-  font-size: 14px;
 }
 
 /* The table already explains itself through its headers and filters. */
