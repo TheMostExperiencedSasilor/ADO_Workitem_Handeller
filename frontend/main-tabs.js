@@ -143,6 +143,7 @@
       ['test-planner-layout.js', 'test-planner-layout-script'],
       ['ote-transfer.js', 'ote-transfer-script'],
       ['result-tracker-workflow.js', 'result-tracker-workflow-script'],
+      ['result-tracker-logged-ado.js', 'result-tracker-logged-ado-script'],
     ];
 
     for (const [src, marker] of scripts) {
