@@ -16,6 +16,7 @@ ROOT = Path(__file__).resolve().parent
 BACKEND = ROOT / "backend"
 ENV = BACKEND / ".venv"
 ENV_PYTHON = ENV / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
+ENV_PYTHONW = ENV / "Scripts/pythonw.exe" if os.name == "nt" else ENV_PYTHON
 RUNTIME = ROOT / ".runtime"
 PID_FILE = RUNTIME / "backend.json"
 LOG_DIR = ROOT / "logs"
@@ -183,9 +184,10 @@ def launch_background() -> int:
     else:
         popen_kwargs["start_new_session"] = True
 
+    server_python = ENV_PYTHONW if os.name == "nt" and ENV_PYTHONW.exists() else ENV_PYTHON
     with BACKEND_LOG.open("a", encoding="utf-8") as log:
         process = subprocess.Popen(
-            [str(ENV_PYTHON), str(Path(__file__).resolve()), "--serve"],
+            [str(server_python), str(Path(__file__).resolve()), "--serve"],
             stdout=log,
             stderr=subprocess.STDOUT,
             **popen_kwargs,
