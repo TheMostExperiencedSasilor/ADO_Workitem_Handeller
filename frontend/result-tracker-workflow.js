@@ -110,17 +110,29 @@
     saveProxy.addEventListener('click', () => { workMenu.open = false; saveButton.click(); });
     openProxy.addEventListener('click', () => { workMenu.open = false; openButton.click(); });
 
-    const syncProxyStates = () => {
-      saveProxy.disabled = saveButton.disabled;
-      openProxy.disabled = openButton.disabled;
-      visibleUpdateButton.disabled = rowsBody.rows.length
-        ? (originalReadButton.disabled || updateButton.disabled)
-        : originalReadButton.disabled;
+    // Only observe the original controls. Observing the whole section caused the
+    // observer to see its own proxy-button `disabled` writes and continuously
+    // retrigger itself, starving the browser event loop and freezing the page.
+    const setDisabledIfChanged = (control, disabled) => {
+      const next = Boolean(disabled);
+      if (control.disabled !== next) control.disabled = next;
     };
-    new MutationObserver(syncProxyStates).observe(section, {
-      subtree: true,
-      attributes: true,
-      attributeFilter: ['disabled'],
+    const syncProxyStates = () => {
+      setDisabledIfChanged(saveProxy, saveButton.disabled);
+      setDisabledIfChanged(openProxy, openButton.disabled);
+      setDisabledIfChanged(
+        visibleUpdateButton,
+        rowsBody.rows.length
+          ? (originalReadButton.disabled || updateButton.disabled)
+          : originalReadButton.disabled,
+      );
+    };
+    const proxyStateObserver = new MutationObserver(syncProxyStates);
+    [originalReadButton, updateButton, saveButton, openButton].forEach((control) => {
+      proxyStateObserver.observe(control, {
+        attributes: true,
+        attributeFilter: ['disabled'],
+      });
     });
     syncProxyStates();
 
@@ -154,13 +166,13 @@
           select.dataset.lockedValue = select.value;
         }
         select.dataset.lockedByResultChecker = '1';
-        select.disabled = true;
+        if (!select.disabled) select.disabled = true;
         select.closest('td')?.classList.add('result-cell-locked');
         select.title = `Locked because ${firstPassedLabel} is Passed.`;
       } else if (select.dataset.lockedByResultChecker === '1') {
         delete select.dataset.lockedByResultChecker;
         delete select.dataset.lockedValue;
-        select.disabled = false;
+        if (select.disabled) select.disabled = false;
         select.closest('td')?.classList.remove('result-cell-locked');
         select.removeAttribute('title');
       }
