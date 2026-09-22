@@ -4,6 +4,7 @@ import pytest
 
 from app import create_app
 from services.ado_client import AdoClient
+from services.ado_session import clear_ado_session, set_ado_session
 
 
 URL = "https://dev.azure.com/aspentechnology/AspenTech%20SAFe/_testPlans/execute?planId=83602&suiteId=141923"
@@ -14,6 +15,9 @@ def configured_env(monkeypatch):
     monkeypatch.setenv("ADO_ORGANIZATION", "configured-org")
     monkeypatch.setenv("ADO_PROJECT", "configured project")
     monkeypatch.setenv("ADO_PAT", "unit-test-secret")
+    set_ado_session("configured-org", "configured project", "unit-test-secret", "7.1")
+    yield
+    clear_ado_session()
 
 
 def point(point_id, case_id, tester, outcome):
