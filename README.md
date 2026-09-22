@@ -118,11 +118,11 @@ Use the Setup page to configure the Azure DevOps connection:
 
 ```text
 ADO organization   (defaults to aspentechnology)
-ADO project        (defaults to AspenTech SAF)
+ADO project        (defaults to AspenTech SAFe)
 ADO PAT
 ```
 
-The Setup page saves values into `backend/.env`. The PAT field is cleared after saving and the token value is never returned to the frontend. `Test connection` checks the values currently entered on the page without saving them first; when the PAT field is blank, an already-saved PAT is reused for the test. If the backend can reach the configured ADO project, the header shows `ADO connected`.
+The Setup page saves values into `backend/.env`. After a PAT is saved, the field shows a fixed masked value instead of returning the real token to the frontend. `Test connection` checks the values currently entered on the page without saving them first; when the PAT has not been replaced, the already-saved PAT is reused for the test. While ADO is being checked, the header shows an animated `Connecting to ADO…` indicator. The connection request times out after 30 seconds. If the backend can reach the configured ADO project, the header shows `ADO connected`.
 
 AI settings remain backend environment configuration for now and are not exposed on the Setup page.
 
