@@ -1,32 +1,28 @@
 (() => {
+  'use strict';
+
   const panel = document.querySelector('.test-plan-panel');
   const trackerPanel = document.querySelector('#testResultsTrackerPanel');
   if (!panel || !trackerPanel || document.querySelector('#assignmentWorkbookSection')) return;
 
-  const resultOptions = ['', 'Passed', 'Failed', 'Blocked', 'Not Run', 'N/A'];
-  const resultLabels = {
-    round1Results: 'Round 1',
-    round2Results: 'Round 2',
-    singleRunResults: 'Single Run',
-    manualRun: 'Manual Run',
-  };
-  const editableKeys = [
-    'round1Results', 'round2Results', 'singleRunResults', 'manualRun',
-    'comment', 'solution', 'defects',
-  ];
-  let trackedRows = [];
-  let sessionMeta = { publishedRuns: [] };
+  let assignmentRows = [];
+  let assignmentById = new Map();
+  let importedResults = new Map();
+  let latestAdoByCase = new Map();
+  let previewRows = [];
+  let previewFresh = false;
+  let sessionMeta = { planId: null, suiteId: null, tester: '' };
 
   const section = document.createElement('section');
   section.id = 'assignmentWorkbookSection';
-  section.className = 'assignment-workbook-section';
+  section.className = 'assignment-workbook-section result-staging-section';
   section.innerHTML = `
     <div class="assignment-workbook-heading">
       <div>
         <h3>Test Result Tracker</h3>
-        <p>Read Define + Execute, log results in the web table, save work locally, then publish a selected result column as a proper Azure DevOps Test Run.</p>
+        <p>Load the assigned ADO cases, bring in automation results, sync the latest ADO status, then review exactly what will be logged.</p>
       </div>
-      <span class="mini-status">ADO-native result publishing</span>
+      <span class="mini-status">Result staging + publishing</span>
     </div>
 
     <div class="assignment-workbook-grid">
@@ -40,82 +36,121 @@
       </div>
     </div>
 
-    <div class="action-row">
-      <button id="previewAssignmentWorkbook" type="button">Read Define + Execute</button>
-      <button id="saveAssignmentJson" type="button" class="secondary-button" disabled>Save Work</button>
-      <button id="openAssignmentJson" type="button" class="secondary-button">Open Work</button>
-      <button id="exportAssignmentWorkbook" type="button" class="secondary-button" disabled>Export Excel</button>
-      <button id="createAdoTestRun" type="button" disabled>Create ADO Test Run</button>
-      <button id="clearAllAssignmentResults" type="button" class="danger-button" disabled>Clear all results</button>
-      <input id="assignmentJsonFile" type="file" accept="application/json,.json" hidden>
+    <div class="staging-primary-actions">
+      <button id="updateAssignmentFromAdo" type="button">Update from ADO</button>
+      <button id="syncResultsWithAdo" type="button" class="secondary-button" disabled>Sync with ADO</button>
     </div>
-    <p id="assignmentWorkbookStatus" class="mini-status" role="status" aria-live="polite">Load an assignment or open a saved JSON session.</p>
-    <div id="publishedRunsPanel" class="published-runs-panel" hidden></div>
+    <p id="assignmentWorkbookStatus" class="mini-status" role="status" aria-live="polite">Load the current ADO assignment first.</p>
 
-    <div id="assignmentWorkbookPreview" hidden>
-      <div id="assignmentWorkbookSummary" class="test-suite-summary"></div>
-      <div class="assignment-preview-wrap">
-        <table class="assignment-preview-table">
+    <section class="staging-import-panel" aria-labelledby="stagingImportHeading">
+      <div class="staging-panel-heading">
+        <div>
+          <h4 id="stagingImportHeading">Bring in results</h4>
+          <p>Import a CSV/TXT file or paste TestResult output. Imported data is staged locally until you sync with ADO.</p>
+        </div>
+        <span id="stagingImportSummary" class="mini-status">0 imported</span>
+      </div>
+      <div class="staging-import-buttons">
+        <button id="importResultCsv" type="button" class="secondary-button" disabled>Import CSV</button>
+        <button id="importResultTxt" type="button" class="secondary-button" disabled>Import TXT</button>
+        <button id="clearImportedResults" type="button" class="secondary-button" disabled>Clear imported results</button>
+        <input id="resultCsvFile" type="file" accept=".csv,text/csv" hidden>
+        <input id="resultTxtFile" type="file" accept=".txt,text/plain" hidden>
+      </div>
+      <label for="testResultPaste">Paste TestResult output</label>
+      <textarea id="testResultPaste" rows="5" placeholder="VSTS24153 Passed&#10;VSTS24846 Failed"></textarea>
+      <div class="staging-import-buttons">
+        <button id="applyPastedResults" type="button" disabled>Apply Pasted Results</button>
+        <button id="clearPastedResults" type="button" class="secondary-button">Clear paste</button>
+      </div>
+    </section>
+
+    <section id="stagingPreviewPanel" class="staging-preview-panel" hidden aria-labelledby="stagingPreviewHeading">
+      <div class="staging-panel-heading">
+        <div>
+          <h4 id="stagingPreviewHeading">Ready-to-log preview</h4>
+          <p>This table is read-only. It shows the current imported result, latest ADO status, and the action that will be taken.</p>
+        </div>
+        <span id="stagingPreviewSummary" class="mini-status"></span>
+      </div>
+      <div id="stagingPreviewNotice" class="staging-preview-notice"></div>
+      <div class="staging-preview-wrap">
+        <table class="staging-preview-table">
           <thead>
             <tr>
-              <th>ID</th><th>Title</th><th>Product Area</th><th>Automation Script Name</th>
-              <th><div class="result-header">Round 1 results<button type="button" class="clear-result-column" data-result-key="round1Results" data-result-label="Round 1 results" disabled>Clear</button></div></th>
-              <th><div class="result-header">Round 2 results<button type="button" class="clear-result-column" data-result-key="round2Results" data-result-label="Round 2 results" disabled>Clear</button></div></th>
-              <th><div class="result-header">Single run results<button type="button" class="clear-result-column" data-result-key="singleRunResults" data-result-label="Single run results" disabled>Clear</button></div></th>
-              <th><div class="result-header">Manual run<button type="button" class="clear-result-column" data-result-key="manualRun" data-result-label="Manual run" disabled>Clear</button></div></th>
-              <th>Comment</th><th>Solution</th><th>Defects</th>
+              <th>Test Case ID</th>
+              <th>Title</th>
+              <th>Imported Result</th>
+              <th>Latest ADO Status</th>
+              <th>Action</th>
             </tr>
           </thead>
-          <tbody id="assignmentWorkbookRows"></tbody>
+          <tbody id="stagingPreviewRows"></tbody>
         </table>
       </div>
+    </section>
+
+    <div class="staging-publish-row">
+      <details id="resultLoggingMenu" class="result-tracker-action-menu result-tracker-logging-menu">
+        <summary class="secondary-button">Result Logging <span aria-hidden="true">▾</span></summary>
+        <div class="result-tracker-menu-panel">
+          <button id="createAdoTestRun" type="button" disabled>Create ADO Test Run</button>
+          <button id="transferAssignmentToOte" type="button" class="secondary-button" disabled>Transfer to OTE</button>
+          <label class="result-tracker-menu-checkbox" title="When disabled, Passed results are logged only when the latest ADO status is Active.">
+            <input id="allowDuplicateLogging" type="checkbox">
+            <span><strong>Allow duplicated logging</strong><br><small>Off by default. Completed ADO cases are skipped.</small></span>
+          </label>
+        </div>
+      </details>
+      <span id="stagingPublishSummary" class="mini-status">Sync with ADO to enable publishing.</span>
+      <input id="oteWorkbookFile" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>
     </div>
 
     <dialog id="adoTestRunDialog" class="ado-run-dialog">
       <form method="dialog">
         <h3>Create Azure DevOps Test Run</h3>
-        <p>Choose one tracker result column. Only rows containing a result will be included; Azure DevOps test-point IDs are validated again before anything is written.</p>
-        <label for="adoRunResultKey">Result source</label>
-        <select id="adoRunResultKey">
-          <option value="round1Results">Round 1 results</option>
-          <option value="round2Results">Round 2 results</option>
-          <option value="singleRunResults">Single run results</option>
-          <option value="manualRun">Manual run</option>
-        </select>
+        <p id="adoRunPreview" class="ado-run-preview"></p>
         <label for="adoRunName">Test run name</label>
         <input id="adoRunName" type="text" maxlength="256">
-        <div id="adoRunPreview" class="ado-run-preview"></div>
         <p id="adoRunDialogStatus" class="mini-status" role="status" aria-live="polite"></p>
         <div class="action-row">
           <button type="submit" value="cancel" class="secondary-button">Cancel</button>
           <button id="publishAdoTestRun" type="button">Create Test Run</button>
         </div>
       </form>
-    </dialog>`;
+    </dialog>
+  `;
 
   trackerPanel.appendChild(section);
 
   const urlInput = section.querySelector('#assignmentWorkbookUrl');
   const testerInput = section.querySelector('#assignmentWorkbookTester');
-  const previewButton = section.querySelector('#previewAssignmentWorkbook');
-  const saveButton = section.querySelector('#saveAssignmentJson');
-  const openButton = section.querySelector('#openAssignmentJson');
-  const exportButton = section.querySelector('#exportAssignmentWorkbook');
+  const updateButton = section.querySelector('#updateAssignmentFromAdo');
+  const syncButton = section.querySelector('#syncResultsWithAdo');
+  const status = section.querySelector('#assignmentWorkbookStatus');
+  const importSummary = section.querySelector('#stagingImportSummary');
+  const importCsvButton = section.querySelector('#importResultCsv');
+  const importTxtButton = section.querySelector('#importResultTxt');
+  const clearImportedButton = section.querySelector('#clearImportedResults');
+  const csvFileInput = section.querySelector('#resultCsvFile');
+  const txtFileInput = section.querySelector('#resultTxtFile');
+  const pasteInput = section.querySelector('#testResultPaste');
+  const applyPasteButton = section.querySelector('#applyPastedResults');
+  const clearPasteButton = section.querySelector('#clearPastedResults');
+  const previewPanel = section.querySelector('#stagingPreviewPanel');
+  const previewSummary = section.querySelector('#stagingPreviewSummary');
+  const previewNotice = section.querySelector('#stagingPreviewNotice');
+  const previewBody = section.querySelector('#stagingPreviewRows');
+  const publishSummary = section.querySelector('#stagingPublishSummary');
   const createRunButton = section.querySelector('#createAdoTestRun');
-  const clearAllResultsButton = section.querySelector('#clearAllAssignmentResults');
-  const clearResultButtons = [...section.querySelectorAll('.clear-result-column')];
-  const jsonFileInput = section.querySelector('#assignmentJsonFile');
+  const transferOteButton = section.querySelector('#transferAssignmentToOte');
+  const allowDuplicate = section.querySelector('#allowDuplicateLogging');
+  const oteFileInput = section.querySelector('#oteWorkbookFile');
   const runDialog = section.querySelector('#adoTestRunDialog');
-  const runResultKey = section.querySelector('#adoRunResultKey');
-  const runName = section.querySelector('#adoRunName');
   const runPreview = section.querySelector('#adoRunPreview');
+  const runName = section.querySelector('#adoRunName');
   const runDialogStatus = section.querySelector('#adoRunDialogStatus');
   const publishRunButton = section.querySelector('#publishAdoTestRun');
-  const publishedRunsPanel = section.querySelector('#publishedRunsPanel');
-  const status = section.querySelector('#assignmentWorkbookStatus');
-  const preview = section.querySelector('#assignmentWorkbookPreview');
-  const summary = section.querySelector('#assignmentWorkbookSummary');
-  const rowsBody = section.querySelector('#assignmentWorkbookRows');
 
   function setStatus(message, error = false) {
     status.textContent = message;
@@ -123,138 +158,86 @@
     status.classList.toggle('ok', !error && Boolean(message));
   }
 
-  function enableWorkActions() {
-    const enabled = trackedRows.length > 0;
-    saveButton.disabled = !enabled;
-    exportButton.disabled = !enabled;
-    createRunButton.disabled = !enabled;
-    clearAllResultsButton.disabled = !enabled;
-    clearResultButtons.forEach((button) => { button.disabled = !enabled; });
+  function normalizeResult(value) {
+    const text = String(value ?? '').trim().toLowerCase().replace(/[\s_-]+/g, ' ');
+    if (!text) return '';
+    if (['pass', 'passed'].includes(text)) return 'Passed';
+    if (['fail', 'failed', 'false'].includes(text)) return 'Failed';
+    if (text === 'blocked') return 'Blocked';
+    if (['not run', 'notrun', 'not executed', 'notexecuted'].includes(text)) return 'Not Run';
+    if (['n/a', 'na', 'not applicable'].includes(text)) return 'N/A';
+    return '';
   }
 
-  function makeResultSelect(row, key) {
-    const select = document.createElement('select');
-    select.className = 'tracking-result-select';
-    for (const optionValue of resultOptions) {
-      const option = document.createElement('option');
-      option.value = optionValue;
-      option.textContent = optionValue || '—';
-      if ((row[key] || '') === optionValue) option.selected = true;
-      select.appendChild(option);
-    }
-    select.addEventListener('change', () => {
-      row[key] = select.value;
-      setStatus('Unsaved changes.');
-    });
-    return select;
-  }
-
-  function makeTextInput(row, key) {
-    const input = document.createElement('input');
-    input.type = 'text';
-    input.className = 'tracking-text-input';
-    input.value = row[key] || '';
-    input.addEventListener('input', () => {
-      row[key] = input.value;
-      setStatus('Unsaved changes.');
-    });
-    return input;
-  }
-
-  function renderRows() {
-    const fragment = document.createDocumentFragment();
-    for (const row of trackedRows) {
-      const tr = document.createElement('tr');
-      const readOnlyValues = [row.testCaseId, row.title, row.productArea, row.automationScriptName];
-      for (const value of readOnlyValues) {
-        const td = document.createElement('td');
-        td.textContent = value ?? '';
-        tr.appendChild(td);
+  function parseCsvRows(text) {
+    const rows = [];
+    let row = [];
+    let cell = '';
+    let quoted = false;
+    const source = String(text || '').replace(/^\uFEFF/, '');
+    for (let index = 0; index < source.length; index += 1) {
+      const char = source[index];
+      if (char === '"') {
+        if (quoted && source[index + 1] === '"') {
+          cell += '"';
+          index += 1;
+        } else {
+          quoted = !quoted;
+        }
+      } else if (char === ',' && !quoted) {
+        row.push(cell);
+        cell = '';
+      } else if ((char === '\n' || char === '\r') && !quoted) {
+        if (char === '\r' && source[index + 1] === '\n') index += 1;
+        row.push(cell);
+        if (row.some((value) => value !== '')) rows.push(row);
+        row = [];
+        cell = '';
+      } else {
+        cell += char;
       }
-      for (const key of ['round1Results', 'round2Results', 'singleRunResults', 'manualRun']) {
-        const td = document.createElement('td');
-        td.appendChild(makeResultSelect(row, key));
-        tr.appendChild(td);
-      }
-      for (const key of ['comment', 'solution', 'defects']) {
-        const td = document.createElement('td');
-        td.appendChild(makeTextInput(row, key));
-        tr.appendChild(td);
-      }
-      fragment.appendChild(tr);
     }
-    rowsBody.replaceChildren(fragment);
-    preview.hidden = false;
-    enableWorkActions();
+    row.push(cell);
+    if (row.some((value) => value !== '')) rows.push(row);
+    return rows;
   }
 
-  function renderSummary() {
-    summary.replaceChildren();
-    const pointCount = trackedRows.reduce((sum, row) => sum + row.testPointIds.length, 0);
-    const values = [
-      ['Test Plan', sessionMeta.planId ?? ''],
-      ['Suite', sessionMeta.suiteId ?? ''],
-      ['Cases', trackedRows.length],
-      ['Test Points', pointCount],
-      ['Tester', sessionMeta.tester || testerInput.value.trim()],
-    ];
-    for (const [label, value] of values) {
-      const item = document.createElement('span');
-      item.textContent = `${label}: ${value}`;
-      summary.appendChild(item);
+  function parseResultCsv(text) {
+    const rows = parseCsvRows(text);
+    if (!rows.length) return [];
+    const normalizeHeader = (value) => String(value || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    const headers = rows[0].map(normalizeHeader);
+    const idIndex = ['testid', 'testcaseid', 'id', 'vstsid'].map((name) => headers.indexOf(name)).find((index) => index >= 0);
+    const resultIndex = ['result', 'outcome', 'status'].map((name) => headers.indexOf(name)).find((index) => index >= 0);
+    if (idIndex == null || resultIndex == null) {
+      throw new Error('CSV must contain a Test ID/TestCaseId column and a Result/Outcome column.');
     }
+    return rows.slice(1).map((cells) => {
+      const rawId = String(cells[idIndex] || '');
+      const match = rawId.match(/VSTS\s*(\d+)|\b(\d+)\b/i);
+      return {
+        testCaseId: match ? String(match[1] || match[2]) : '',
+        result: normalizeResult(cells[resultIndex]),
+      };
+    }).filter((item) => item.testCaseId && item.result);
   }
 
-  function renderPublishedRuns() {
-    const runs = Array.isArray(sessionMeta.publishedRuns) ? sessionMeta.publishedRuns : [];
-    publishedRunsPanel.replaceChildren();
-    if (!runs.length) {
-      publishedRunsPanel.hidden = true;
-      return;
-    }
-    const heading = document.createElement('strong');
-    heading.textContent = 'Published ADO Test Runs';
-    publishedRunsPanel.appendChild(heading);
-    for (const run of runs) {
-      const item = document.createElement('div');
-      item.className = 'published-run-item';
-      const text = document.createElement('span');
-      text.textContent = `${run.resultLabel || 'Results'} · Run ${run.runId} · ${run.publishedPoints || 0} point(s)`;
-      item.appendChild(text);
-      const target = run.webAccessUrl || run.apiUrl;
-      if (target) {
-        const link = document.createElement('a');
-        link.href = target;
-        link.target = '_blank';
-        link.rel = 'noopener noreferrer';
-        link.textContent = 'Open in ADO';
-        item.appendChild(link);
+  function parseTestResultTxt(text) {
+    const resultPattern = '(Passed|Pass|Failed|Fail|Blocked|Not\\s*Run|NotExecuted|N\\/A)';
+    return String(text || '').split(/\r?\n/).map((line) => {
+      let match = line.match(new RegExp('\\bVSTS\\s*(\\d+)\\b[^\\r\\n]*?\\b' + resultPattern + '\\b', 'i'));
+      if (!match) {
+        match = line.match(new RegExp('^\\s*(\\d{3,})\\b[^\\r\\n]*?\\b' + resultPattern + '\\b', 'i'));
       }
-      publishedRunsPanel.appendChild(item);
-    }
-    publishedRunsPanel.hidden = false;
+      return match ? { testCaseId: String(match[1]), result: normalizeResult(match[2]) } : null;
+    }).filter(Boolean);
   }
 
-  function normalizeTrackedRow(row) {
-    const normalized = {
-      testCaseId: Number(row.testCaseId ?? row.id),
-      title: String(row.title || ''),
-      productArea: String(row.productArea || ''),
-      automationScriptName: String(row.automationScriptName || ''),
-      order: row.order ?? null,
-      tester: String(row.tester || ''),
-      testPointIds: Array.isArray(row.testPointIds)
-        ? [...new Set(row.testPointIds.map(Number).filter((value) => Number.isInteger(value) && value > 0))]
-        : [],
-      configurations: Array.isArray(row.configurations) ? row.configurations.map(String) : [],
-    };
-    for (const key of editableKeys) normalized[key] = String(row[key] || '');
-    return normalized;
-  }
+  window.ResultStagingUtils = { normalizeResult, parseResultCsv, parseTestResultTxt };
 
   async function readJsonResponse(response) {
     const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(data.error || `Request failed: ${response.status}`);
+    if (!response.ok) throw new Error(data.error || data.message || `Request failed: ${response.status}`);
     return data;
   }
 
@@ -269,26 +252,97 @@
     URL.revokeObjectURL(objectUrl);
   }
 
-  function sessionDocument() {
-    return {
-      version: 2,
-      planId: sessionMeta.planId ?? null,
-      suiteId: sessionMeta.suiteId ?? null,
-      tester: sessionMeta.tester || testerInput.value.trim(),
-      sourceUrl: urlInput.value.trim(),
-      savedAt: new Date().toISOString(),
-      publishedRuns: Array.isArray(sessionMeta.publishedRuns) ? sessionMeta.publishedRuns : [],
-      rows: trackedRows,
-    };
+  function plannerStatus(outcome) {
+    const value = String(outcome || '').trim().toLowerCase();
+    if (value === 'passed') return 'Passed';
+    if (value === 'failed') return 'Failed';
+    return 'Active';
   }
 
-  previewButton.addEventListener('click', async () => {
+  function testerMatches(pointTester, query) {
+    const tester = String(pointTester || '').trim().toLowerCase();
+    const wanted = String(query || '').trim().toLowerCase();
+    if (!wanted) return true;
+    return tester === wanted || tester.includes(wanted) || (tester && wanted.includes(tester));
+  }
+
+  function aggregateAdoStatus(current, incoming) {
+    if (!current) return incoming;
+    if (incoming === 'Failed') return 'Failed';
+    if (incoming === 'Passed' && current === 'Active') return 'Passed';
+    return current;
+  }
+
+  function actionFor(importedResult, adoStatus) {
+    if (importedResult !== 'Passed') return 'Need Analysis';
+    if (!adoStatus || adoStatus === 'Not found') return 'Need Analysis';
+    if (allowDuplicate.checked) return 'Passed';
+    return adoStatus === 'Active' ? 'Passed' : 'Skipped';
+  }
+
+  function refreshImportControls() {
+    const loaded = assignmentRows.length > 0;
+    importCsvButton.disabled = !loaded;
+    importTxtButton.disabled = !loaded;
+    applyPasteButton.disabled = !loaded || !pasteInput.value.trim();
+    clearImportedButton.disabled = importedResults.size === 0;
+    syncButton.disabled = !loaded || importedResults.size === 0;
+    importSummary.textContent = `${importedResults.size} imported · ${assignmentRows.length} ADO case(s) loaded`;
+  }
+
+  function markPreviewStale(message = 'Results changed. Sync with ADO again before publishing.') {
+    previewFresh = false;
+    createRunButton.disabled = true;
+    transferOteButton.disabled = true;
+    publishSummary.textContent = message;
+    if (previewRows.length) {
+      previewNotice.textContent = message;
+      previewNotice.classList.add('warning');
+    }
+  }
+
+  function applyImported(entries, sourceLabel) {
+    if (!assignmentRows.length) {
+      setStatus('Update from ADO before importing results.', true);
+      return;
+    }
+    let matched = 0;
+    let unmatched = 0;
+    let duplicates = 0;
+    for (const entry of entries) {
+      const id = String(entry.testCaseId || '').trim();
+      const result = normalizeResult(entry.result);
+      if (!id || !result) continue;
+      if (!assignmentById.has(id)) {
+        unmatched += 1;
+        continue;
+      }
+      if (importedResults.has(id)) duplicates += 1;
+      importedResults.set(id, { testCaseId: id, result, source: sourceLabel });
+      matched += 1;
+    }
+    refreshImportControls();
+    markPreviewStale();
+    setStatus(
+      matched
+        ? `${sourceLabel}: ${matched} result row(s) staged${duplicates ? ` · ${duplicates} existing staged result(s) replaced` : ''}${unmatched ? ` · ${unmatched} ID(s) not in the current assignment` : ''}. Sync with ADO to build the logging preview.`
+        : `No matching result rows were found in ${sourceLabel}.`,
+      matched === 0,
+    );
+  }
+
+  function renderAssignmentSummary(message) {
+    setStatus(message || `Loaded ${assignmentRows.length} assigned test case(s) from ADO.`);
+    refreshImportControls();
+  }
+
+  async function updateFromAdo() {
     if (!urlInput.value.trim() || !testerInput.value.trim()) {
       setStatus('Test Plan URL and Assigned tester are required.', true);
       return;
     }
-    previewButton.disabled = true;
-    setStatus('Reading Define and Execute…');
+    updateButton.disabled = true;
+    setStatus('Updating assigned test cases from ADO…');
     try {
       const response = await fetch('/api/test-plans/assignment-preview', {
         method: 'POST',
@@ -296,178 +350,283 @@
         body: JSON.stringify({ url: urlInput.value.trim(), tester: testerInput.value.trim() }),
       });
       const data = await readJsonResponse(response);
-      trackedRows = (data.rows || []).map(normalizeTrackedRow);
+      assignmentRows = Array.isArray(data.rows) ? data.rows : [];
+      assignmentById = new Map(assignmentRows.map((row) => [String(row.testCaseId), row]));
       sessionMeta = {
         planId: data.planId,
         suiteId: data.suiteId,
         tester: data.matchedTester || testerInput.value.trim(),
-        publishedRuns: [],
       };
-      renderSummary();
-      renderRows();
-      renderPublishedRuns();
-      setStatus(data.message || 'Assignment loaded. Fill results directly in the table.');
+      if (data.matchedTester) testerInput.value = data.matchedTester;
+      const removedImports = [...importedResults.keys()].filter((id) => !assignmentById.has(id));
+      removedImports.forEach((id) => importedResults.delete(id));
+      previewRows = [];
+      previewBody.replaceChildren();
+      previewPanel.hidden = true;
+      markPreviewStale('Import results, then sync with ADO to generate the logging preview.');
+      renderAssignmentSummary(
+        `${data.message || `Loaded ${assignmentRows.length} assigned case(s).`}${removedImports.length ? ` ${removedImports.length} staged result(s) were removed because the case is no longer assigned.` : ''}`
+      );
     } catch (error) {
-      setStatus(error.message || 'Unable to read the assignment.', true);
+      setStatus(error.message || 'Unable to update from ADO.', true);
     } finally {
-      previewButton.disabled = false;
+      updateButton.disabled = false;
+      refreshImportControls();
     }
-  });
+  }
 
-  clearResultButtons.forEach((button) => {
-    button.addEventListener('click', () => {
-      if (!trackedRows.length) return;
-      const key = button.dataset.resultKey;
-      const label = button.dataset.resultLabel || 'this result column';
-      if (!key) return;
-      if (!window.confirm(`Clear all values in "${label}"?`)) return;
-      for (const row of trackedRows) row[key] = '';
-      renderRows();
-      setStatus(`${label} cleared for all loaded test cases.`);
-    });
-  });
+  function buildPreviewRows() {
+    previewRows = assignmentRows
+      .filter((row) => importedResults.has(String(row.testCaseId)))
+      .map((row) => {
+        const id = String(row.testCaseId);
+        const imported = importedResults.get(id);
+        const adoStatus = latestAdoByCase.get(id) || 'Not found';
+        return {
+          testCaseId: id,
+          title: String(row.title || ''),
+          importedResult: imported.result,
+          latestAdoStatus: adoStatus,
+          action: actionFor(imported.result, adoStatus),
+          assignment: row,
+        };
+      });
+  }
 
-  clearAllResultsButton.addEventListener('click', () => {
-    if (!trackedRows.length) return;
-    if (!window.confirm('Clear Round 1, Round 2, Single run and Manual run results for all loaded test cases?')) return;
-    const keys = ['round1Results', 'round2Results', 'singleRunResults', 'manualRun'];
-    trackedRows.forEach((row) => keys.forEach((key) => { row[key] = ''; }));
-    renderRows();
-    setStatus('All result columns cleared. Comments, solutions and defects were kept.');
-  });
+  function actionBadge(action) {
+    const span = document.createElement('span');
+    span.className = `staging-action-badge ${action.toLowerCase().replace(/\s+/g, '-')}`;
+    span.textContent = action;
+    return span;
+  }
 
-  saveButton.addEventListener('click', () => {
-    const blob = new Blob([JSON.stringify(sessionDocument(), null, 2)], { type: 'application/json' });
-    const tester = (sessionMeta.tester || 'tester').replace(/[^A-Za-z0-9._-]+/g, '_');
-    const filename = `TestPlan_${sessionMeta.planId || 'work'}_Suite_${sessionMeta.suiteId || 'session'}_${tester}.json`;
-    downloadBlob(blob, filename);
-    setStatus(`Work saved: ${filename}`);
-  });
-
-  openButton.addEventListener('click', () => jsonFileInput.click());
-  jsonFileInput.addEventListener('change', async () => {
-    const file = jsonFileInput.files?.[0];
-    if (!file) return;
-    try {
-      const data = JSON.parse(await file.text());
-      if (!data || !Array.isArray(data.rows)) throw new Error('Invalid saved work file.');
-      trackedRows = data.rows.map(normalizeTrackedRow);
-      sessionMeta = {
-        planId: data.planId,
-        suiteId: data.suiteId,
-        tester: data.tester || '',
-        publishedRuns: Array.isArray(data.publishedRuns) ? data.publishedRuns : [],
-      };
-      if (data.sourceUrl) urlInput.value = data.sourceUrl;
-      if (data.tester) testerInput.value = data.tester;
-      renderSummary();
-      renderRows();
-      renderPublishedRuns();
-      const missingMappings = trackedRows.filter((row) => !row.testPointIds.length).length;
-      setStatus(missingMappings
-        ? `Opened ${file.name}. ${missingMappings} row(s) are from an older session without Test Point IDs; reload from ADO before publishing.`
-        : `Opened saved work: ${file.name}`,
-        false);
-    } catch (error) {
-      setStatus(error.message || 'Could not open the JSON work file.', true);
-    } finally {
-      jsonFileInput.value = '';
+  function renderPreview() {
+    const fragment = document.createDocumentFragment();
+    for (const row of previewRows) {
+      const tr = document.createElement('tr');
+      [row.testCaseId, row.title, row.importedResult, row.latestAdoStatus].forEach((value) => {
+        const td = document.createElement('td');
+        td.textContent = value;
+        tr.appendChild(td);
+      });
+      const actionCell = document.createElement('td');
+      actionCell.appendChild(actionBadge(row.action));
+      tr.appendChild(actionCell);
+      fragment.appendChild(tr);
     }
-  });
+    previewBody.replaceChildren(fragment);
 
-  exportButton.addEventListener('click', async () => {
-    exportButton.disabled = true;
-    setStatus('Building Excel workbook…');
+    const passed = previewRows.filter((row) => row.action === 'Passed').length;
+    const skipped = previewRows.filter((row) => row.action === 'Skipped').length;
+    const analysis = previewRows.filter((row) => row.action === 'Need Analysis').length;
+    previewSummary.textContent = `${previewRows.length} imported · ${passed} Passed · ${skipped} Skipped · ${analysis} Need Analysis`;
+    previewNotice.classList.remove('warning');
+    previewNotice.textContent = passed
+      ? `Only the ${passed} row(s) marked Passed will be sent to ADO/OTE. Failed or other non-passing imports are held for analysis.`
+      : 'Nothing is currently eligible to log.';
+    previewPanel.hidden = false;
+    previewFresh = true;
+    createRunButton.disabled = passed === 0;
+    transferOteButton.disabled = passed === 0;
+    publishSummary.textContent = passed
+      ? `${passed} result(s) ready to log.`
+      : 'No results are currently eligible to log.';
+  }
+
+  async function syncWithAdo() {
+    if (!assignmentRows.length || !importedResults.size) return;
+    syncButton.disabled = true;
+    setStatus('Syncing imported results with the latest ADO status…');
     try {
-      const response = await fetch('/api/test-plans/assignment-workbook', {
+      const response = await fetch('/api/test-plans/read-suite', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          rows: trackedRows,
-          filename: `TestPlan_${sessionMeta.planId || 'Results'}_Suite_${sessionMeta.suiteId || 'Main'}.xlsx`,
-        }),
+        body: JSON.stringify({ url: urlInput.value.trim() }),
       });
-      if (!response.ok) {
-        const data = await response.json().catch(() => ({}));
-        throw new Error(data.error || `Request failed: ${response.status}`);
+      const data = await readJsonResponse(response);
+      const points = Array.isArray(data.testPoints) ? data.testPoints : [];
+      const testerQuery = testerInput.value.trim();
+      latestAdoByCase = new Map();
+      for (const point of points) {
+        if (testerQuery && !testerMatches(point.tester, testerQuery)) continue;
+        const id = String(point.testCaseId ?? '').trim();
+        if (!id) continue;
+        const next = plannerStatus(point.outcome);
+        latestAdoByCase.set(id, aggregateAdoStatus(latestAdoByCase.get(id), next));
       }
-      downloadBlob(await response.blob(), `TestPlan_${sessionMeta.planId || 'Results'}_Suite_${sessionMeta.suiteId || 'Main'}.xlsx`);
-      setStatus('Excel workbook exported from the current web table.');
+      buildPreviewRows();
+      renderPreview();
+      setStatus('ADO sync complete. Review the read-only preview before publishing.');
     } catch (error) {
-      setStatus(error.message || 'Unable to export the Excel workbook.', true);
+      markPreviewStale('ADO sync failed. Publishing remains disabled until a successful sync.');
+      setStatus(error.message || 'Unable to sync with ADO.', true);
     } finally {
-      enableWorkActions();
+      refreshImportControls();
+    }
+  }
+
+  function rowsReadyToLog() {
+    if (!previewFresh) return [];
+    return previewRows
+      .filter((row) => row.action === 'Passed')
+      .map((row) => ({
+        ...row.assignment,
+        round1Results: 'Passed',
+        round2Results: '',
+        singleRunResults: '',
+        manualRun: '',
+        comment: '',
+        solution: '',
+        defects: '',
+      }));
+  }
+
+  function suggestedRunName() {
+    const tester = sessionMeta.tester || testerInput.value.trim() || 'Tester';
+    const stamp = new Date().toISOString().slice(0, 16).replace('T', ' ').replace(':', '');
+    return `Plan ${sessionMeta.planId || ''} Suite ${sessionMeta.suiteId || ''} - Imported Results - ${tester} - ${stamp}`.trim();
+  }
+
+  updateButton.addEventListener('click', updateFromAdo);
+  syncButton.addEventListener('click', syncWithAdo);
+
+  pasteInput.addEventListener('input', refreshImportControls);
+  applyPasteButton.addEventListener('click', () => {
+    try {
+      applyImported(parseTestResultTxt(pasteInput.value), 'Pasted TXT');
+    } catch (error) {
+      setStatus(error.message || 'Unable to parse pasted results.', true);
+    }
+  });
+  clearPasteButton.addEventListener('click', () => {
+    pasteInput.value = '';
+    refreshImportControls();
+  });
+
+  importCsvButton.addEventListener('click', () => csvFileInput.click());
+  importTxtButton.addEventListener('click', () => txtFileInput.click());
+
+  csvFileInput.addEventListener('change', async () => {
+    const file = csvFileInput.files?.[0];
+    if (!file) return;
+    try {
+      applyImported(parseResultCsv(await file.text()), `CSV ${file.name}`);
+    } catch (error) {
+      setStatus(error.message || 'Unable to import CSV results.', true);
+    } finally {
+      csvFileInput.value = '';
     }
   });
 
-  function suggestedRunName() {
-    const source = resultLabels[runResultKey.value] || 'Results';
-    const tester = sessionMeta.tester || testerInput.value.trim() || 'Tester';
-    const stamp = new Date().toISOString().slice(0, 16).replace('T', ' ').replace(':', '');
-    return `Plan ${sessionMeta.planId || ''} Suite ${sessionMeta.suiteId || ''} - ${source} - ${tester} - ${stamp}`.trim();
-  }
+  txtFileInput.addEventListener('change', async () => {
+    const file = txtFileInput.files?.[0];
+    if (!file) return;
+    try {
+      applyImported(parseTestResultTxt(await file.text()), `TXT ${file.name}`);
+    } catch (error) {
+      setStatus(error.message || 'Unable to import TXT results.', true);
+    } finally {
+      txtFileInput.value = '';
+    }
+  });
 
-  function updateRunPreview(resetName = false) {
-    if (resetName) runName.value = suggestedRunName();
-    const key = runResultKey.value;
-    const rows = trackedRows.filter((row) => String(row[key] || '').trim());
-    const missingMapping = rows.filter((row) => !row.testPointIds.length).length;
-    const pointIds = new Set(rows.flatMap((row) => row.testPointIds));
-    const counts = new Map();
-    rows.forEach((row) => counts.set(row[key], (counts.get(row[key]) || 0) + row.testPointIds.length));
-    const parts = [...counts.entries()].map(([name, count]) => `${name}: ${count}`).join(' · ');
-    runPreview.textContent = rows.length
-      ? `${rows.length} case(s) · ${pointIds.size} test point(s)${parts ? ` · ${parts}` : ''}${missingMapping ? ` · ${missingMapping} row(s) need reload` : ''}`
-      : `No ${resultLabels[key] || 'selected'} results are currently logged.`;
-    publishRunButton.disabled = rows.length === 0 || missingMapping > 0;
-  }
+  clearImportedButton.addEventListener('click', () => {
+    if (!importedResults.size) return;
+    if (!window.confirm('Clear all staged imported results?')) return;
+    importedResults.clear();
+    latestAdoByCase.clear();
+    previewRows = [];
+    previewBody.replaceChildren();
+    previewPanel.hidden = true;
+    markPreviewStale('Import results, then sync with ADO to generate the logging preview.');
+    refreshImportControls();
+    setStatus('All staged imported results were cleared.');
+  });
+
+  allowDuplicate.addEventListener('change', () => {
+    if (!previewFresh) return;
+    buildPreviewRows();
+    renderPreview();
+  });
 
   createRunButton.addEventListener('click', () => {
+    const rows = rowsReadyToLog();
+    if (!rows.length) return;
+    runName.value = suggestedRunName();
+    runPreview.textContent = `${rows.length} Passed case(s) are ready to publish. Skipped and Need Analysis rows will not be included.`;
     runDialogStatus.textContent = '';
-    updateRunPreview(true);
+    runDialogStatus.classList.remove('error');
+    publishRunButton.disabled = false;
     if (typeof runDialog.showModal === 'function') runDialog.showModal();
     else runDialog.setAttribute('open', '');
   });
 
-  runResultKey.addEventListener('change', () => updateRunPreview(true));
-
   publishRunButton.addEventListener('click', async () => {
-    if (publishRunButton.disabled) return;
+    const rows = rowsReadyToLog();
+    if (!rows.length) return;
     publishRunButton.disabled = true;
-    runDialogStatus.textContent = 'Creating test run and publishing results…';
+    runDialogStatus.textContent = 'Creating ADO Test Run…';
     try {
       const response = await fetch('/api/test-plans/publish-test-run', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           url: urlInput.value.trim(),
-          resultKey: runResultKey.value,
+          resultKey: 'round1Results',
           runName: runName.value.trim(),
-          rows: trackedRows,
+          rows,
+          allowDuplicateLogging: Boolean(allowDuplicate.checked),
         }),
       });
       const data = await readJsonResponse(response);
-      sessionMeta.publishedRuns = Array.isArray(sessionMeta.publishedRuns) ? sessionMeta.publishedRuns : [];
-      sessionMeta.publishedRuns.push({
-        runId: data.runId,
-        runName: data.runName,
-        resultSource: data.resultSource,
-        resultLabel: data.resultLabel,
-        publishedPoints: data.publishedPoints,
-        publishedCases: data.publishedCases,
-        webAccessUrl: data.webAccessUrl || '',
-        apiUrl: data.apiUrl || '',
-        publishedAt: new Date().toISOString(),
-      });
-      renderPublishedRuns();
       if (typeof runDialog.close === 'function') runDialog.close();
       else runDialog.removeAttribute('open');
-      setStatus(`${data.message || `Created ADO Test Run ${data.runId}.`} Save Work to keep the run reference in this session.`);
+      markPreviewStale('ADO results were published. Sync with ADO again before any further logging.');
+      setStatus(data.message || `Created ADO Test Run ${data.runId}.`);
     } catch (error) {
       runDialogStatus.textContent = error.message || 'Unable to create the ADO Test Run.';
       runDialogStatus.classList.add('error');
     } finally {
-      updateRunPreview(false);
+      publishRunButton.disabled = false;
+    }
+  });
+
+  transferOteButton.addEventListener('click', () => {
+    if (!rowsReadyToLog().length) return;
+    oteFileInput.click();
+  });
+
+  oteFileInput.addEventListener('change', async () => {
+    const file = oteFileInput.files?.[0];
+    if (!file) return;
+    const rows = rowsReadyToLog();
+    if (!rows.length) {
+      oteFileInput.value = '';
+      return;
+    }
+    transferOteButton.disabled = true;
+    setStatus(`Transferring ${rows.length} Passed result(s) to OTE…`);
+    try {
+      const formData = new FormData();
+      formData.append('oteFile', file);
+      formData.append('url', urlInput.value.trim());
+      formData.append('resultKey', 'round1Results');
+      formData.append('rows', JSON.stringify(rows));
+      formData.append('allowDuplicateLogging', String(Boolean(allowDuplicate.checked)));
+      const response = await fetch('/api/test-plans/transfer-to-ote', { method: 'POST', body: formData });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.error || `Request failed: ${response.status}`);
+      }
+      const stem = file.name.replace(/\.xlsx$/i, '');
+      downloadBlob(await response.blob(), `${stem}_Completed.xlsx`);
+      const skipped = Number(response.headers.get('X-OTE-Skipped-Cases') || 0);
+      setStatus(`OTE workbook generated from ${rows.length} staged Passed result(s)${skipped ? ` · ${skipped} case(s) were skipped by the final ADO duplicate check` : ''}.`);
+    } catch (error) {
+      setStatus(error.message || 'Unable to generate the OTE workbook.', true);
+    } finally {
+      oteFileInput.value = '';
+      transferOteButton.disabled = !previewFresh || rowsReadyToLog().length === 0;
     }
   });
 
@@ -484,7 +643,9 @@
       syncingUrl = false;
     };
     inputs.forEach((input) => input.addEventListener('input', () => syncFrom(input)));
-    if (primaryUrl.value.trim()) inputs.forEach((input) => { if (input !== primaryUrl) input.value = primaryUrl.value.trim(); });
+    if (primaryUrl.value.trim()) {
+      inputs.forEach((input) => { if (input !== primaryUrl) input.value = primaryUrl.value.trim(); });
+    }
   }
 
   const subTabs = [
@@ -520,5 +681,6 @@
     });
   });
 
+  refreshImportControls();
   if (subTabs.length) activateResultSubtab(0);
 })();
