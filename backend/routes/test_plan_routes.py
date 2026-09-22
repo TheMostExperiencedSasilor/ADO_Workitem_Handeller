@@ -4,8 +4,7 @@ from urllib.parse import parse_qs, urlparse
 import requests
 from flask import Blueprint, jsonify, request
 
-from config import AppConfig
-from services.ado_client import AdoClient
+from services.ado_session import NOT_CONNECTED_MESSAGE, get_ado_client
 
 test_plans_bp = Blueprint("test_plans", __name__, url_prefix="/api/test-plans")
 
@@ -50,12 +49,9 @@ def read_suite():
     except ValueError as error:
         return jsonify({"error": str(error)}), 400
     try:
-        config = AppConfig.from_env()
-        config.require_ado()
-    except (RuntimeError, ValueError):
-        return jsonify({"error": "ADO configuration is missing or invalid. Check organization, project and PAT in Setup."}), 400
-    try:
-        points = AdoClient(config).read_test_points(plan_id, suite_id)
+        points = get_ado_client().read_test_points(plan_id, suite_id)
+    except RuntimeError:
+        return jsonify({"error": NOT_CONNECTED_MESSAGE}), 400
     except requests.Timeout:
         return jsonify({"error": "Azure DevOps API timed out. Please try again."}), 504
     except requests.HTTPError as error:
