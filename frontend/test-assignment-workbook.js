@@ -253,10 +253,13 @@
   }
 
   function plannerStatus(outcome) {
-    const value = String(outcome || '').trim().toLowerCase();
+    const raw = String(outcome || '').trim();
+    const value = raw.toLowerCase().replace(/[\\s_-]+/g, '');
     if (value === 'passed') return 'Passed';
     if (value === 'failed') return 'Failed';
-    return 'Active';
+    if (!value || ['active', 'notrun', 'notexecuted', 'unspecified', 'none'].includes(value)) return 'Active';
+    if (value === 'notapplicable' || value === 'na') return 'N/A';
+    return raw;
   }
 
   function testerMatches(pointTester, query) {
@@ -268,9 +271,10 @@
 
   function aggregateAdoStatus(current, incoming) {
     if (!current) return incoming;
-    if (incoming === 'Failed') return 'Failed';
-    if (incoming === 'Passed' && current === 'Active') return 'Passed';
-    return current;
+    if (current === 'Failed' || incoming === 'Failed') return 'Failed';
+    if (current === 'Passed' || incoming === 'Passed') return 'Passed';
+    if (current !== 'Active') return current;
+    return incoming;
   }
 
   function actionFor(importedResult, adoStatus) {
