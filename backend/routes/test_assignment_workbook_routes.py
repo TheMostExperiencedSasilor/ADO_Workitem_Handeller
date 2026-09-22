@@ -4,9 +4,9 @@ import re
 import requests
 from flask import Blueprint, jsonify, request, send_file
 
-from config import AppConfig
 from routes.test_plan_routes import parse_test_plan_url
 from services.ado_client import AdoClient
+from services.ado_session import NOT_CONNECTED_MESSAGE, get_ado_client
 from services.protected_test_run_publisher import ProtectedTestRunPublisher
 from services.result_logging_guard import ResultLoggingGuard
 from services.test_assignment_workbook import TestAssignmentWorkbookService
@@ -28,9 +28,7 @@ def _read_payload():
 
 
 def _client() -> AdoClient:
-    config = AppConfig.from_env()
-    config.require_ado()
-    return AdoClient(config)
+    return get_ado_client()
 
 
 def _service() -> TestAssignmentWorkbookService:
@@ -70,7 +68,7 @@ def assignment_preview():
         return jsonify({"error": str(error)}), 400
     except (RuntimeError, requests.RequestException) as error:
         if isinstance(error, RuntimeError):
-            return jsonify({"error": "ADO configuration is missing or invalid. Check organization, project and PAT in Setup."}), 400
+            return jsonify({"error": NOT_CONNECTED_MESSAGE}), 400
         return _ado_error(error)
     except Exception:
         return jsonify({"error": "Azure DevOps REST API failed or returned an invalid response. Please try again."}), 502
@@ -130,7 +128,7 @@ def logging_eligibility():
         return jsonify({"error": str(error)}), 400
     except (RuntimeError, requests.RequestException) as error:
         if isinstance(error, RuntimeError):
-            return jsonify({"error": "ADO configuration is missing or invalid. Check organization, project and PAT in Setup."}), 400
+            return jsonify({"error": NOT_CONNECTED_MESSAGE}), 400
         return _ado_error(error)
     except Exception:
         return jsonify({"error": "Unable to refresh duplicate-logging eligibility from Azure DevOps."}), 502
@@ -175,7 +173,7 @@ def transfer_to_ote():
         return jsonify({"error": str(error)}), 400
     except (RuntimeError, requests.RequestException) as error:
         if isinstance(error, RuntimeError):
-            return jsonify({"error": "ADO configuration is missing or invalid. Check organization, project and PAT in Setup."}), 400
+            return jsonify({"error": NOT_CONNECTED_MESSAGE}), 400
         return _ado_error(error)
     except Exception:
         return jsonify({"error": "Unable to update the OTE workbook."}), 500
@@ -216,7 +214,7 @@ def publish_test_run():
         return jsonify({"error": str(error)}), 400
     except (RuntimeError, requests.RequestException) as error:
         if isinstance(error, RuntimeError):
-            return jsonify({"error": "ADO configuration is missing or invalid. Check organization, project and PAT in Setup."}), 400
+            return jsonify({"error": NOT_CONNECTED_MESSAGE}), 400
         return _ado_error(error)
     except Exception:
         return jsonify({"error": "Unable to create and publish the Azure DevOps test run."}), 502
