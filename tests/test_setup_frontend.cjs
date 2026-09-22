@@ -6,7 +6,7 @@ const html = fs.readFileSync('frontend/index.html', 'utf8');
 const js = fs.readFileSync('frontend/app.js', 'utf8');
 
 test('Setup exposes one disabled Connect to ADO action', () => {
-  assert.match(html, /id="connectAdoButton" disabled>Connect to ADO<\/button>/);
+  assert.match(html, /id="connectAdoButton" type="button" disabled>Connect to ADO<\/button>/);
   assert.doesNotMatch(html, />Save setup<\/button>/);
   assert.doesNotMatch(html, />Test connection<\/button>/);
 });
