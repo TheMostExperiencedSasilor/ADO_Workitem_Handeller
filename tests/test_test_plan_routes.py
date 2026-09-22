@@ -186,7 +186,7 @@ def test_summary_section_is_served_and_endpoint_registered():
     assert 'id="testResultsSummaryPanel"' in html
     assert 'id="testResultsTrackerPanel"' in html
     assert 'id="testResultsChartsPanel"' in html
-    assert html.index('id="saveSetupButton"') < html.index('id="testResultsSummaryTab"') < html.index('id="testPlanHeading"') < html.index('class="panel work-type-panel"')
+    assert html.index('id="connectAdoButton"') < html.index('id="testResultsSummaryTab"') < html.index('id="testPlanHeading"') < html.index('class="panel work-type-panel"')
     for element_id in ("testPlanUrl", "loadTestSuiteButton", "testSuiteSummary", "testSuiteRows",
                        "copyTestSuiteButton", "copyFailedTestsButton"):
         assert f'id="{element_id}"' in html
