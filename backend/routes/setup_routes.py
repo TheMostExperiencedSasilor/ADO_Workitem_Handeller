@@ -16,10 +16,6 @@ SETUP_KEYS = {
     "adoProject": "ADO_PROJECT",
     "adoPat": "ADO_PAT",
     "adoApiVersion": "ADO_API_VERSION",
-    "aiProvider": "AI_PROVIDER",
-    "aiBaseUrl": "AI_BASE_URL",
-    "aiModel": "AI_MODEL",
-    "githubToken": "GITHUB_TOKEN",
 }
 
 
@@ -29,12 +25,11 @@ def setup_status():
     return jsonify(
         {
             "envFileExists": ENV_PATH.exists(),
+            "adoOrganization": config.ado_organization,
+            "adoProject": config.ado_project,
             "adoOrganizationConfigured": bool(config.ado_organization),
             "adoProjectConfigured": bool(config.ado_project),
             "adoPatConfigured": bool(config.ado_pat),
-            "aiBaseUrlConfigured": bool(config.ai_base_url),
-            "aiModelConfigured": bool(config.ai_model),
-            "githubTokenConfigured": bool(config.github_token),
         }
     )
 
