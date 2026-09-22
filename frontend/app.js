@@ -2,12 +2,18 @@ const output = document.querySelector('#output');
 const healthBadge = document.querySelector('#healthBadge');
 const healthStatusText = document.querySelector('#healthStatusText');
 const adoConnectionBadge = document.querySelector('#adoConnectionBadge');
+const adoConnectionText = document.querySelector('#adoConnectionText');
+const adoConnectionProgress = document.querySelector('#adoConnectionProgress');
 const setupStatus = document.querySelector('#setupStatus');
 const adoOrganizationInput = document.querySelector('#adoOrganization');
 const adoProjectInput = document.querySelector('#adoProject');
 const adoPatInput = document.querySelector('#adoPat');
 const testAdoConnectionButton = document.querySelector('#testAdoConnectionButton');
 const readIds = document.querySelector('#readIds');
+
+const PAT_MASK = '****************';
+let adoPatSaved = false;
+let adoPatDirty = false;
 
 const creatableTabTypes = {
   feature: 'Feature',
@@ -34,15 +40,23 @@ function setupPayload() {
   return {
     adoOrganization: adoOrganizationInput.value,
     adoProject: adoProjectInput.value,
-    adoPat: adoPatInput.value,
+    adoPat: adoPatDirty ? adoPatInput.value : '',
   };
 }
 
-function clearSecretInputs() {
-  adoPatInput.value = '';
+function setSavedPatMask(configured) {
+  adoPatSaved = Boolean(configured);
+  adoPatDirty = false;
+  adoPatInput.value = adoPatSaved ? PAT_MASK : '';
+  adoPatInput.placeholder = adoPatSaved
+    ? 'PAT saved'
+    : 'Enter your Personal Access Token';
 }
 
-function markSetupDirty() {
+function markSetupDirty(event) {
+  if (event?.target === adoPatInput) {
+    adoPatDirty = true;
+  }
   setSetupStatus('Unsaved changes');
   setAdoConnection('ADO not checked');
 }
@@ -69,8 +83,9 @@ function setSetupStatus(text, state = '') {
 }
 
 function setAdoConnection(text, state = '') {
-  adoConnectionBadge.textContent = text;
-  adoConnectionBadge.classList.remove('ok', 'error');
+  adoConnectionText.textContent = text;
+  adoConnectionBadge.classList.remove('ok', 'error', 'connecting');
+  adoConnectionProgress.hidden = state !== 'connecting';
   if (state) adoConnectionBadge.classList.add(state);
 }
 
@@ -121,6 +136,8 @@ async function checkHealth() {
 }
 
 async function checkAdoConnection() {
+  testAdoConnectionButton.disabled = true;
+  setAdoConnection('Connecting to ADO…', 'connecting');
   try {
     const data = await api('/api/setup/ado-connection');
     setAdoConnection(data.message || 'ADO connected', 'ok');
@@ -128,6 +145,8 @@ async function checkAdoConnection() {
   } catch (error) {
     setAdoConnection('ADO not connected', 'error');
     return null;
+  } finally {
+    testAdoConnectionButton.disabled = false;
   }
 }
 
@@ -136,9 +155,7 @@ async function checkSetup() {
     const status = await api('/api/setup/status');
     adoOrganizationInput.value = status.adoOrganization || 'aspentechnology';
     adoProjectInput.value = status.adoProject || 'AspenTech SAFe';
-    adoPatInput.placeholder = status.adoPatConfigured
-      ? 'PAT saved — enter a new value to replace it'
-      : 'Enter your Personal Access Token';
+    setSavedPatMask(status.adoPatConfigured);
 
     const ready = status.adoOrganizationConfigured
       && status.adoProjectConfigured
@@ -165,7 +182,7 @@ async function checkSetup() {
 
 async function testAdoConnection() {
   testAdoConnectionButton.disabled = true;
-  setAdoConnection('Checking ADO…');
+  setAdoConnection('Connecting to ADO…', 'connecting');
   try {
     const data = await api('/api/setup/ado-connection', {
       method: 'POST',
@@ -188,11 +205,13 @@ document.querySelectorAll('.work-tab').forEach((tab) => {
 document.querySelector('#saveSetupButton').addEventListener('click', async () => {
   try {
     show('Saving setup to backend .env...');
+    const payload = setupPayload();
+    const hadSavedPat = adoPatSaved;
     const result = await api('/api/setup', {
       method: 'POST',
-      body: JSON.stringify(setupPayload()),
+      body: JSON.stringify(payload),
     });
-    clearSecretInputs();
+    setSavedPatMask(Boolean(payload.adoPat) || hadSavedPat);
     await checkSetup();
     show(result);
   } catch (error) {
@@ -205,6 +224,13 @@ document.querySelector('#saveSetupButton').addEventListener('click', async () =>
 testAdoConnectionButton.addEventListener('click', testAdoConnection);
 for (const input of [adoOrganizationInput, adoProjectInput, adoPatInput]) {
   input.addEventListener('input', markSetupDirty);
+}
+for (const eventName of ['focus', 'click']) {
+  adoPatInput.addEventListener(eventName, () => {
+    if (adoPatSaved && !adoPatDirty && adoPatInput.value === PAT_MASK) {
+      adoPatInput.select();
+    }
+  });
 }
 
 document.querySelector('#readButton').addEventListener('click', async () => {

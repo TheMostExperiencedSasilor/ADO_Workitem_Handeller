@@ -18,7 +18,12 @@
       <h1>ADO Work Item AI Assistant</h1>
     </div>
     <div class="status-row">
-      <span id="adoConnectionBadge" class="status-badge">ADO not checked</span>
+      <span id="adoConnectionBadge" class="status-badge" role="status" aria-live="polite">
+        <span id="adoConnectionProgress" class="ado-connection-progress" hidden aria-hidden="true">
+          <span class="ado-connection-progress-bar"></span>
+        </span>
+        <span id="adoConnectionText">ADO not checked</span>
+      </span>
       <span id="healthBadge" class="status-badge backend-status checking" role="status" aria-live="polite">
         <span class="backend-status-dot" aria-hidden="true"></span>
         <span id="healthStatusText">Checking app…</span>
@@ -39,7 +44,7 @@
         </div>
         <div>
           <label for="adoProject">ADO project</label>
-          <input id="adoProject" type="text" value="AspenTech SAF">
+          <input id="adoProject" type="text" value="AspenTech SAFe">
         </div>
         <div>
           <label for="adoPat">ADO PAT</label>

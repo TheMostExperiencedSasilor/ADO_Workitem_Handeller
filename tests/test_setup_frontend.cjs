@@ -12,7 +12,8 @@ test('Setup exposes a real Test connection action', () => {
 });
 
 test('Setup clearly distinguishes saved PAT and unsaved edits', () => {
-  assert.match(js, /PAT saved — enter a new value to replace it/);
+  assert.match(js, /const PAT_MASK = '\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*'/);
+  assert.match(js, /adoPat: adoPatDirty \? adoPatInput\.value : ''/);
   assert.match(js, /setSetupStatus\('Unsaved changes'\)/);
   assert.match(js, /setAdoConnection\('ADO not checked'\)/);
 });
@@ -20,4 +21,16 @@ test('Setup clearly distinguishes saved PAT and unsaved edits', () => {
 test('Setup keeps configured state separate from connection state', () => {
   assert.match(js, /setSetupStatus\(setupMessage, ready \? 'ok' : 'error'\)/);
   assert.match(js, /setAdoConnection\(data\.message \|\| 'ADO connected', 'ok'\)/);
+});
+
+
+test('ADO connection shows an indeterminate progress indicator', () => {
+  assert.match(html, /id="adoConnectionProgress"/);
+  assert.match(html, /id="adoConnectionText"/);
+  assert.match(js, /setAdoConnection\('Connecting to ADO…', 'connecting'\)/);
+});
+
+test('saved PAT stays visually masked without sending the mask as the PAT', () => {
+  assert.match(js, /adoPatInput\.value = adoPatSaved \? PAT_MASK : ''/);
+  assert.match(js, /setSavedPatMask\(Boolean\(payload\.adoPat\) \|\| hadSavedPat\)/);
 });
