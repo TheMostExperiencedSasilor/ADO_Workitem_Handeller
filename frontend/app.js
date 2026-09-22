@@ -31,16 +31,11 @@ function setupPayload() {
     adoOrganization: document.querySelector('#adoOrganization').value,
     adoProject: document.querySelector('#adoProject').value,
     adoPat: document.querySelector('#adoPat').value,
-    aiProvider: 'github',
-    aiBaseUrl: document.querySelector('#aiBaseUrl').value,
-    aiModel: document.querySelector('#aiModel').value,
-    githubToken: document.querySelector('#githubToken').value,
   };
 }
 
 function clearSecretInputs() {
   document.querySelector('#adoPat').value = '';
-  document.querySelector('#githubToken').value = '';
 }
 
 function writePayload() {
@@ -130,12 +125,11 @@ async function checkAdoConnection() {
 async function checkSetup() {
   try {
     const status = await api('/api/setup/status');
+    document.querySelector('#adoOrganization').value = status.adoOrganization || 'aspentechnology';
+    document.querySelector('#adoProject').value = status.adoProject || 'AspenTech SAF';
     const ready = status.adoOrganizationConfigured
       && status.adoProjectConfigured
-      && status.adoPatConfigured
-      && status.aiBaseUrlConfigured
-      && status.aiModelConfigured
-      && status.githubTokenConfigured;
+      && status.adoPatConfigured;
     setSetupStatus(ready ? 'Configured' : 'Missing values', ready ? 'ok' : 'error');
     if (status.adoOrganizationConfigured && status.adoProjectConfigured && status.adoPatConfigured) {
       await checkAdoConnection();
