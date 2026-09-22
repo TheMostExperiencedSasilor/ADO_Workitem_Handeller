@@ -135,7 +135,7 @@ async function checkSetup() {
   try {
     const status = await api('/api/setup/status');
     adoOrganizationInput.value = status.adoOrganization || 'aspentechnology';
-    adoProjectInput.value = status.adoProject || 'AspenTech SAF';
+    adoProjectInput.value = status.adoProject || 'AspenTech SAFe';
     adoPatInput.placeholder = status.adoPatConfigured
       ? 'PAT saved — enter a new value to replace it'
       : 'Enter your Personal Access Token';
