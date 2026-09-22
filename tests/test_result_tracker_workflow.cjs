@@ -2,51 +2,26 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 
-const source = fs.readFileSync('frontend/result-tracker-workflow.js', 'utf8');
-const css = fs.readFileSync('frontend/result-tracker-workflow.css', 'utf8');
+const source = fs.readFileSync('frontend/test-assignment-workbook.js', 'utf8');
 const tabs = fs.readFileSync('frontend/main-tabs.js', 'utf8');
 
-test('Result Tracker uses the simplified top-level workflow', () => {
-  assert.match(source, /resultTrackerUpdateFromAdo/);
+test('Result Tracker follows ADO -> import -> sync -> preview -> publish', () => {
   assert.match(source, /Update from ADO/);
-  assert.match(source, /Work <span/);
-  assert.match(source, /Result Logging <span/);
-  assert.match(source, /saveButton\.click\(\)/);
-  assert.match(source, /openButton\.click\(\)/);
+  assert.match(source, /Sync with ADO/);
+  assert.match(source, /Bring in results/);
+  assert.match(source, /Ready-to-log preview/);
+  assert.match(source, /Result Logging/);
 });
 
-test('result logging menu retains both outputs and duplicate protection', () => {
-  assert.match(source, /loggingPanel\.append\(createRunButton, transferButton\)/);
-  assert.match(source, /allowDuplicateLogging/);
-  assert.match(source, /result-tracker-menu-checkbox/);
+test('only Passed preview rows are sent to publishing outputs', () => {
+  assert.match(source, /row\.action === 'Passed'/);
+  assert.match(source, /Create ADO Test Run/);
+  assert.match(source, /Transfer to OTE/);
+  assert.match(source, /Skipped and Need Analysis rows will not be included/);
 });
 
-test('each result column gets a safe Fill control', () => {
-  assert.match(source, /fill-result-column/);
-  assert.match(source, /<option value="Passed">Passed<\/option>/);
-  assert.match(source, /<option value="Failed">Failed<\/option>/);
-  assert.match(source, /!select\.value && !select\.disabled/);
-  assert.match(source, /Existing and locked results will not be changed/);
-});
-
-test('result checker locks cells after the first Passed without deleting values', () => {
-  assert.match(source, /id="lockResultsAfterPassed" type="checkbox" checked/);
-  assert.match(source, /firstPassedIndex/);
-  assert.match(source, /index > firstPassedIndex/);
-  assert.match(source, /select\.dataset\.lockedValue = select\.value/);
-  assert.match(source, /select\.disabled = true/);
-  assert.doesNotMatch(source, /select\.value\s*=\s*['"]Not Required['"]/);
-});
-
-test('proxy-state observer cannot observe and retrigger its own disabled writes', () => {
-  assert.match(source, /setDisabledIfChanged/);
-  assert.match(source, /proxyStateObserver\.observe\(control/);
-  assert.match(source, /\[originalReadButton, updateButton, saveButton, openButton\]/);
-  assert.doesNotMatch(source, /MutationObserver\(syncProxyStates\)\.observe\(section/);
-});
-
-test('workflow assets are loaded by the Test Results workspace', () => {
-  assert.match(tabs, /result-tracker-workflow\.css/);
-  assert.match(tabs, /result-tracker-workflow\.js/);
-  assert.match(css, /result-cell-locked/);
+test('legacy editable tracker workflow assets are no longer loaded', () => {
+  assert.doesNotMatch(tabs, /result-tracker-workflow\.js/);
+  assert.doesNotMatch(tabs, /result-tracker-logged-ado\.js/);
+  assert.doesNotMatch(tabs, /ote-transfer\.js/);
 });
