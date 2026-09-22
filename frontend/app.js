@@ -141,7 +141,7 @@ async function checkSetup() {
 
     if (status.adoConnected) {
       setSetupStatus('Connected', 'ok');
-      setAdoConnection('ADO connected', 'ok');
+      setAdoConnection('ADO Connected', 'ok');
     } else {
       setSetupStatus('Not connected');
       setAdoConnection('ADO not connected', 'error');
@@ -167,7 +167,7 @@ async function connectToAdo() {
       body: JSON.stringify(setupPayload()),
     });
     setSetupStatus('Connected', 'ok');
-    setAdoConnection(result.message || 'ADO connected', 'ok');
+    setAdoConnection('ADO Connected', 'ok');
 
     // PAT exists only in backend process memory after a successful connection.
     adoPatInput.value = '';

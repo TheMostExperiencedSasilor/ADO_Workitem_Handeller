@@ -46,3 +46,10 @@ test('ADO connection keeps the indeterminate progress indicator', () => {
   assert.match(html, /id="adoConnectionText"/);
   assert.match(js, /setAdoConnection\('Connecting to ADO…', 'connecting'\)/);
 });
+
+
+test('ADO header uses only concise connection status text', () => {
+  assert.match(js, /setAdoConnection\('Connecting to ADO…', 'connecting'\)/);
+  assert.match(js, /setAdoConnection\('ADO Connected', 'ok'\)/);
+  assert.doesNotMatch(js, /setAdoConnection\(result\.message/);
+});
