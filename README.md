@@ -13,7 +13,7 @@ A lightweight Python + HTML/CSS/JavaScript assistant for Azure DevOps work items
 - Test Planner can select ADO test cases and generate Visual Studio UFT `.playlist` files directly in the web app.
 - Result Tracker supports editable result grids, JSON save/open, Excel export, ADO Test Run publishing, and optional OTE workbook transfer.
 - Includes a floating AI chatbox in the frontend.
-- Includes a local Setup page for ADO and AI settings.
+- Includes a local Setup page for Azure DevOps connection settings.
 - Shows live ADO connection state and a glowing local app running/stopped indicator.
 - Keeps all secrets in backend `.env` only. No PAT or GitHub token is exposed to frontend code.
 
@@ -114,18 +114,17 @@ http://localhost:5000
 
 ## Setup
 
-Use the Setup page to enter:
+Use the Setup page to configure the Azure DevOps connection:
 
 ```text
-ADO organization
-ADO project
+ADO organization   (defaults to aspentechnology)
+ADO project        (defaults to AspenTech SAF)
 ADO PAT
-AI base URL
-AI model
-GitHub / AI token
 ```
 
-The Setup page saves values into `backend/.env`. Password fields are cleared after saving and token values are never returned to the frontend. If the backend can reach the configured ADO project, the header shows `ADO connected`.
+The Setup page saves values into `backend/.env`. The PAT field is cleared after saving and the token value is never returned to the frontend. `Test connection` checks the values currently entered on the page without saving them first; when the PAT field is blank, an already-saved PAT is reused for the test. If the backend can reach the configured ADO project, the header shows `ADO connected`.
+
+AI settings remain backend environment configuration for now and are not exposed on the Setup page.
 
 You can also create `.env` manually if preferred:
 
