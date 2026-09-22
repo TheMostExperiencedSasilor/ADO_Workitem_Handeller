@@ -10,6 +10,7 @@ from app import create_app
 from config import AppConfig
 from routes.test_plan_routes import parse_test_plan_url
 from services.ado_client import AdoClient
+from services.ado_session import clear_ado_session, set_ado_session
 
 URL = "https://dev.azure.com/aspentechnology/AspenTech%20SAFe/_testPlans/execute?planId=83602&suiteId=106867"
 
@@ -18,7 +19,15 @@ URL = "https://dev.azure.com/aspentechnology/AspenTech%20SAFe/_testPlans/execute
 def config(monkeypatch):
     for name, value in {"ADO_ORGANIZATION": "configured-org", "ADO_PROJECT": "configured project", "ADO_PAT": "unit-test-secret"}.items():
         monkeypatch.setenv(name, value)
-    return AppConfig.from_env()
+    value = AppConfig.from_env()
+    set_ado_session(
+        value.ado_organization,
+        value.ado_project,
+        value.ado_pat,
+        value.ado_api_version,
+    )
+    yield value
+    clear_ado_session()
 
 
 @pytest.mark.parametrize('url', [
@@ -74,11 +83,11 @@ def test_summary_and_empty_suite(config, monkeypatch, url):
             assert 'no test points' in response.json['message']
 
 
-def test_missing_configuration(monkeypatch):
-    monkeypatch.setenv('ADO_PAT', '')
+def test_missing_configuration():
+    clear_ado_session()
     response = create_app().test_client().post('/api/test-plans/read-suite', json={'url': URL})
     assert response.status_code == 400
-    assert 'configuration' in response.json['error']
+    assert 'not connected' in response.json['error'].lower()
 
 
 @pytest.mark.parametrize('status, text', [(401, 'authentication'), (403, 'authentication'), (404, 'not found'), (500, 'REST API')])
