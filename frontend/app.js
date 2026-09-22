@@ -3,6 +3,10 @@ const healthBadge = document.querySelector('#healthBadge');
 const healthStatusText = document.querySelector('#healthStatusText');
 const adoConnectionBadge = document.querySelector('#adoConnectionBadge');
 const setupStatus = document.querySelector('#setupStatus');
+const adoOrganizationInput = document.querySelector('#adoOrganization');
+const adoProjectInput = document.querySelector('#adoProject');
+const adoPatInput = document.querySelector('#adoPat');
+const testAdoConnectionButton = document.querySelector('#testAdoConnectionButton');
 const readIds = document.querySelector('#readIds');
 
 const creatableTabTypes = {
@@ -28,19 +32,19 @@ function selectedRules() {
 
 function setupPayload() {
   return {
-    adoOrganization: document.querySelector('#adoOrganization').value,
-    adoProject: document.querySelector('#adoProject').value,
-    adoPat: document.querySelector('#adoPat').value,
-    aiProvider: 'github',
-    aiBaseUrl: document.querySelector('#aiBaseUrl').value,
-    aiModel: document.querySelector('#aiModel').value,
-    githubToken: document.querySelector('#githubToken').value,
+    adoOrganization: adoOrganizationInput.value,
+    adoProject: adoProjectInput.value,
+    adoPat: adoPatInput.value,
   };
 }
 
 function clearSecretInputs() {
-  document.querySelector('#adoPat').value = '';
-  document.querySelector('#githubToken').value = '';
+  adoPatInput.value = '';
+}
+
+function markSetupDirty() {
+  setSetupStatus('Unsaved changes');
+  setAdoConnection('ADO not checked');
 }
 
 function writePayload() {
@@ -130,14 +134,23 @@ async function checkAdoConnection() {
 async function checkSetup() {
   try {
     const status = await api('/api/setup/status');
+    adoOrganizationInput.value = status.adoOrganization || 'aspentechnology';
+    adoProjectInput.value = status.adoProject || 'AspenTech SAF';
+    adoPatInput.placeholder = status.adoPatConfigured
+      ? 'PAT saved — enter a new value to replace it'
+      : 'Enter your Personal Access Token';
+
     const ready = status.adoOrganizationConfigured
       && status.adoProjectConfigured
-      && status.adoPatConfigured
-      && status.aiBaseUrlConfigured
-      && status.aiModelConfigured
-      && status.githubTokenConfigured;
-    setSetupStatus(ready ? 'Configured' : 'Missing values', ready ? 'ok' : 'error');
-    if (status.adoOrganizationConfigured && status.adoProjectConfigured && status.adoPatConfigured) {
+      && status.adoPatConfigured;
+    const setupMessage = ready
+      ? 'Configured'
+      : status.adoOrganizationConfigured && status.adoProjectConfigured
+        ? 'Missing PAT'
+        : 'Missing values';
+    setSetupStatus(setupMessage, ready ? 'ok' : 'error');
+
+    if (ready) {
       await checkAdoConnection();
     } else {
       setAdoConnection('ADO not connected', 'error');
@@ -147,6 +160,24 @@ async function checkSetup() {
     setSetupStatus('Setup check failed', 'error');
     setAdoConnection('ADO not connected', 'error');
     show(error.message);
+  }
+}
+
+async function testAdoConnection() {
+  testAdoConnectionButton.disabled = true;
+  setAdoConnection('Checking ADO…');
+  try {
+    const data = await api('/api/setup/ado-connection', {
+      method: 'POST',
+      body: JSON.stringify(setupPayload()),
+    });
+    setAdoConnection(data.message || 'ADO connected', 'ok');
+    show(data);
+  } catch (error) {
+    setAdoConnection('ADO not connected', 'error');
+    show(error.message);
+  } finally {
+    testAdoConnectionButton.disabled = false;
   }
 }
 
@@ -162,8 +193,7 @@ document.querySelector('#saveSetupButton').addEventListener('click', async () =>
       body: JSON.stringify(setupPayload()),
     });
     clearSecretInputs();
-    setSetupStatus('Saved', 'ok');
-    await checkAdoConnection();
+    await checkSetup();
     show(result);
   } catch (error) {
     setSetupStatus('Save failed', 'error');
@@ -172,7 +202,10 @@ document.querySelector('#saveSetupButton').addEventListener('click', async () =>
   }
 });
 
-document.querySelector('#checkSetupButton').addEventListener('click', checkSetup);
+testAdoConnectionButton.addEventListener('click', testAdoConnection);
+for (const input of [adoOrganizationInput, adoProjectInput, adoPatInput]) {
+  input.addEventListener('input', markSetupDirty);
+}
 
 document.querySelector('#readButton').addEventListener('click', async () => {
   try {

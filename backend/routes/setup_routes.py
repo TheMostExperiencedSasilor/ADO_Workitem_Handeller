@@ -1,4 +1,5 @@
 import os
+from dataclasses import replace
 from pathlib import Path
 
 from dotenv import set_key
@@ -16,10 +17,6 @@ SETUP_KEYS = {
     "adoProject": "ADO_PROJECT",
     "adoPat": "ADO_PAT",
     "adoApiVersion": "ADO_API_VERSION",
-    "aiProvider": "AI_PROVIDER",
-    "aiBaseUrl": "AI_BASE_URL",
-    "aiModel": "AI_MODEL",
-    "githubToken": "GITHUB_TOKEN",
 }
 
 
@@ -29,20 +26,18 @@ def setup_status():
     return jsonify(
         {
             "envFileExists": ENV_PATH.exists(),
+            "adoOrganization": config.ado_organization,
+            "adoProject": config.ado_project,
             "adoOrganizationConfigured": bool(config.ado_organization),
             "adoProjectConfigured": bool(config.ado_project),
             "adoPatConfigured": bool(config.ado_pat),
-            "aiBaseUrlConfigured": bool(config.ai_base_url),
-            "aiModelConfigured": bool(config.ai_model),
-            "githubTokenConfigured": bool(config.github_token),
         }
     )
 
 
-@setup_bp.get("/ado-connection")
-def ado_connection():
+def _ado_connection_response(config: AppConfig):
     try:
-        project = AdoClient(AppConfig.from_env()).test_connection()
+        project = AdoClient(config).test_connection()
         return jsonify(
             {
                 "connected": True,
@@ -58,6 +53,27 @@ def ado_connection():
                 "error": str(error),
             }
         ), 400
+
+
+@setup_bp.get("/ado-connection")
+def ado_connection():
+    return _ado_connection_response(AppConfig.from_env())
+
+
+@setup_bp.post("/ado-connection")
+def test_ado_connection():
+    payload = request.get_json(silent=True) or {}
+    saved = AppConfig.from_env()
+
+    config = replace(
+        saved,
+        ado_organization=str(
+            payload.get("adoOrganization", saved.ado_organization)
+        ).strip(),
+        ado_project=str(payload.get("adoProject", saved.ado_project)).strip(),
+        ado_pat=str(payload.get("adoPat", "")).strip() or saved.ado_pat,
+    )
+    return _ado_connection_response(config)
 
 
 @setup_bp.post("")
