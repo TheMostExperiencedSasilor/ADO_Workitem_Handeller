@@ -1,5 +1,4 @@
 import os
-from dataclasses import replace
 from pathlib import Path
 
 from dotenv import set_key
@@ -58,22 +57,6 @@ def _ado_connection_response(config: AppConfig):
 @setup_bp.get("/ado-connection")
 def ado_connection():
     return _ado_connection_response(AppConfig.from_env())
-
-
-@setup_bp.post("/ado-connection")
-def test_ado_connection():
-    payload = request.get_json(silent=True) or {}
-    saved = AppConfig.from_env()
-
-    config = replace(
-        saved,
-        ado_organization=str(
-            payload.get("adoOrganization", saved.ado_organization)
-        ).strip(),
-        ado_project=str(payload.get("adoProject", saved.ado_project)).strip(),
-        ado_pat=str(payload.get("adoPat", "")).strip() or saved.ado_pat,
-    )
-    return _ado_connection_response(config)
 
 
 @setup_bp.post("")
