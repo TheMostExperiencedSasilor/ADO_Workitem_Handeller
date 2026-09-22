@@ -407,6 +407,13 @@ button:hover {
   background: #1d2939;
 }
 
+.setup-panel button:disabled {
+  background: #98a2b3;
+  color: #f8fafc;
+  cursor: not-allowed;
+  opacity: 0.72;
+}
+
 .field-row {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
