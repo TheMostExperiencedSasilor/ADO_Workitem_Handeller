@@ -43,7 +43,7 @@ class AdoClient:
             url,
             headers=self.headers,
             params={"api-version": self.config.ado_api_version},
-            timeout=15,
+            timeout=30,
         )
         response.raise_for_status()
         data = response.json()
