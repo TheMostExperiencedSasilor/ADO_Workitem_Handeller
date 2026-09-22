@@ -84,6 +84,41 @@ h3 {
   background: #fff1f0;
 }
 
+.status-badge.connecting {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--muted);
+  border-color: #9cc3ff;
+  background: #f4f8ff;
+}
+
+.ado-connection-progress {
+  position: relative;
+  width: 86px;
+  height: 8px;
+  flex: 0 0 86px;
+  overflow: hidden;
+  border: 1px solid #9cc3ff;
+  border-radius: 999px;
+  background: #e8f1ff;
+}
+
+.ado-connection-progress-bar {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 42%;
+  border-radius: 999px;
+  background: var(--accent);
+  animation: ado-connection-progress 1.05s ease-in-out infinite;
+}
+
+@keyframes ado-connection-progress {
+  from { left: -42%; }
+  to { left: 100%; }
+}
+
 .backend-status {
   display: inline-flex;
   align-items: center;
@@ -123,8 +158,13 @@ h3 {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .backend-status-dot {
+  .backend-status-dot,
+  .ado-connection-progress-bar {
     animation: none !important;
+  }
+
+  .ado-connection-progress-bar {
+    left: 29%;
   }
 }
 
