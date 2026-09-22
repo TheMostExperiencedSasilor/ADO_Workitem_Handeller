@@ -18,26 +18,31 @@ test('Connect to ADO is enabled only when all three visible fields are filled', 
   assert.match(js, /connectAdoButton\.disabled = adoConnecting \|\| !allFieldsFilled/);
 });
 
-test('PAT is blank on load and cleared again after a successful connection', () => {
+test('PAT is blank on startup and cleared after a successful connection', () => {
   assert.match(js, /adoPatInput\.value = ''/);
   assert.doesNotMatch(js, /PAT_MASK/);
   assert.doesNotMatch(js, /setSavedPatMask/);
 });
 
-test('Connect to ADO saves before checking the saved ADO connection', () => {
-  const save = js.indexOf("api('/api/setup', {");
-  const connect = js.indexOf("api('/api/setup/ado-connection')", save);
-  assert.ok(save >= 0);
-  assert.ok(connect > save);
+test('startup does not automatically call Azure DevOps', () => {
+  const checkSetupStart = js.indexOf('async function checkSetup()');
+  const connectStart = js.indexOf('async function connectToAdo()');
+  const checkSetupBody = js.slice(checkSetupStart, connectStart);
+  assert.doesNotMatch(checkSetupBody, /\/api\/setup\/ado-connection/);
+  assert.match(checkSetupBody, /status\.adoConnected/);
+  assert.match(checkSetupBody, /setAdoConnection\('ADO not connected', 'error'\)/);
+});
+
+test('Connect to ADO is a single session connection request', () => {
+  const connectStart = js.indexOf('async function connectToAdo()');
+  const connectBody = js.slice(connectStart, js.indexOf("document.querySelectorAll('.work-tab')", connectStart));
+  assert.match(connectBody, /api\('\/api\/setup', \{/);
+  assert.doesNotMatch(connectBody, /\/api\/setup\/ado-connection/);
+  assert.match(connectBody, /patPersisted: false/);
 });
 
 test('ADO connection keeps the indeterminate progress indicator', () => {
   assert.match(html, /id="adoConnectionProgress"/);
   assert.match(html, /id="adoConnectionText"/);
   assert.match(js, /setAdoConnection\('Connecting to ADO…', 'connecting'\)/);
-});
-
-test('Setup keeps configured state separate from connection state', () => {
-  assert.match(js, /setSetupStatus\('Configured', 'ok'\)/);
-  assert.match(js, /setAdoConnection\(connection\.message \|\| 'ADO connected', 'ok'\)/);
 });
