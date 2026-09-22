@@ -22,8 +22,8 @@ class AppConfig:
     @staticmethod
     def from_env() -> "AppConfig":
         return AppConfig(
-            ado_organization=os.getenv("ADO_ORGANIZATION", ""),
-            ado_project=os.getenv("ADO_PROJECT", ""),
+            ado_organization=os.getenv("ADO_ORGANIZATION", "aspentechnology"),
+            ado_project=os.getenv("ADO_PROJECT", "AspenTech SAF"),
             ado_pat=os.getenv("ADO_PAT", ""),
             ado_api_version=os.getenv("ADO_API_VERSION", "7.1"),
             ai_provider=os.getenv("AI_PROVIDER", "github"),
