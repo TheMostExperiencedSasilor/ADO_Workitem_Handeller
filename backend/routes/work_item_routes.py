@@ -50,7 +50,7 @@ def create_work_item():
     payload = request.get_json(silent=True) or {}
     builder = WorkItemBuilder()
     prepared = builder.prepare_write_payload(payload)
-    client = AdoClient(AppConfig.from_env())
+    client = get_ado_client()
     created = client.create_work_item(
         work_item_type=prepared["type"],
         title=prepared["title"],
