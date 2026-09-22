@@ -18,11 +18,11 @@
       <h1>ADO Work Item AI Assistant</h1>
     </div>
     <div class="status-row">
-      <span id="adoConnectionBadge" class="status-badge" role="status" aria-live="polite">
+      <span id="adoConnectionBadge" class="status-badge error" role="status" aria-live="polite">
         <span id="adoConnectionProgress" class="ado-connection-progress" hidden aria-hidden="true">
           <span class="ado-connection-progress-bar"></span>
         </span>
-        <span id="adoConnectionText">ADO not checked</span>
+        <span id="adoConnectionText">ADO not connected</span>
       </span>
       <span id="healthBadge" class="status-badge backend-status checking" role="status" aria-live="polite">
         <span class="backend-status-dot" aria-hidden="true"></span>
@@ -35,7 +35,7 @@
     <section class="panel setup-panel">
       <div class="panel-heading-row">
         <h2>Setup</h2>
-        <span id="setupStatus" class="mini-status">Not checked</span>
+        <span id="setupStatus" class="mini-status">Not connected</span>
       </div>
       <div class="field-row">
         <div>
