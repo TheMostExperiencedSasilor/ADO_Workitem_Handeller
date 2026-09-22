@@ -53,7 +53,6 @@ function updateConnectAdoButtonState() {
 
 function markSetupDirty() {
   setSetupStatus('Unsaved changes');
-  setAdoConnection('ADO not checked');
   updateConnectAdoButtonState();
 }
 
@@ -131,23 +130,6 @@ async function checkHealth() {
   }
 }
 
-async function checkAdoConnection() {
-  adoConnecting = true;
-  updateConnectAdoButtonState();
-  setAdoConnection('Connecting to ADO…', 'connecting');
-  try {
-    const data = await api('/api/setup/ado-connection');
-    setAdoConnection(data.message || 'ADO connected', 'ok');
-    return data;
-  } catch (error) {
-    setAdoConnection('ADO not connected', 'error');
-    return null;
-  } finally {
-    adoConnecting = false;
-    updateConnectAdoButtonState();
-  }
-}
-
 async function checkSetup() {
   try {
     const status = await api('/api/setup/status');
@@ -157,19 +139,11 @@ async function checkSetup() {
     adoPatInput.placeholder = 'Enter your Personal Access Token';
     updateConnectAdoButtonState();
 
-    const ready = status.adoOrganizationConfigured
-      && status.adoProjectConfigured
-      && status.adoPatConfigured;
-    const setupMessage = ready
-      ? 'Configured'
-      : status.adoOrganizationConfigured && status.adoProjectConfigured
-        ? 'Missing PAT'
-        : 'Missing values';
-    setSetupStatus(setupMessage, ready ? 'ok' : 'error');
-
-    if (ready) {
-      await checkAdoConnection();
+    if (status.adoConnected) {
+      setSetupStatus('Connected', 'ok');
+      setAdoConnection('ADO connected', 'ok');
     } else {
+      setSetupStatus('Not connected');
       setAdoConnection('ADO not connected', 'error');
     }
     show(status);
@@ -187,27 +161,25 @@ async function connectToAdo() {
   updateConnectAdoButtonState();
   setAdoConnection('Connecting to ADO…', 'connecting');
 
-  let setupSaved = false;
   try {
-    const saveResult = await api('/api/setup', {
+    const result = await api('/api/setup', {
       method: 'POST',
       body: JSON.stringify(setupPayload()),
     });
-    setupSaved = true;
-    setSetupStatus('Configured', 'ok');
+    setSetupStatus('Connected', 'ok');
+    setAdoConnection(result.message || 'ADO connected', 'ok');
 
-    const connection = await api('/api/setup/ado-connection');
-    setAdoConnection(connection.message || 'ADO connected', 'ok');
-
+    // PAT exists only in backend process memory after a successful connection.
     adoPatInput.value = '';
     show({
-      message: 'ADO setup saved and connected.',
-      savedKeys: saveResult.savedKeys || [],
-      project: connection.project || null,
+      message: 'ADO connected for this app session.',
+      savedKeys: result.savedKeys || [],
+      patPersisted: false,
+      project: result.project || null,
     });
   } catch (error) {
+    setSetupStatus('Not connected', 'error');
     setAdoConnection('ADO not connected', 'error');
-    setSetupStatus(setupSaved ? 'Configured' : 'Save failed', setupSaved ? 'ok' : 'error');
     show(error.message);
   } finally {
     adoConnecting = false;
