@@ -3,9 +3,9 @@ from collections import defaultdict
 import requests
 from flask import Blueprint, jsonify, request
 
-from config import AppConfig
 from routes.test_plan_routes import parse_test_plan_url
 from services.ado_client import AdoClient
+from services.ado_session import NOT_CONNECTED_MESSAGE, get_ado_client
 
 
 logged_ado_results_bp = Blueprint(
@@ -14,7 +14,7 @@ logged_ado_results_bp = Blueprint(
 
 
 def _client() -> AdoClient:
-    return AdoClient(AppConfig.from_env())
+    return get_ado_client()
 
 
 def _aliases(point: dict) -> list[str]:
@@ -80,7 +80,7 @@ def logged_results():
             f"Plans/{plan_id}/Suites/{suite_id}/TestPoint"
         )
     except RuntimeError:
-        return jsonify({"error": "ADO configuration is missing or invalid. Check Setup."}), 400
+        return jsonify({"error": NOT_CONNECTED_MESSAGE}), 400
     except requests.Timeout:
         return jsonify({"error": "Azure DevOps API timed out. Please try again."}), 504
     except requests.RequestException:

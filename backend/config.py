@@ -1,8 +1,37 @@
 import os
+import re
 from dataclasses import dataclass
+from pathlib import Path
+
 from dotenv import load_dotenv
 
-load_dotenv()
+ENV_PATH = Path(__file__).resolve().parent / ".env"
+
+
+def purge_persisted_ado_pat(env_path: Path = ENV_PATH) -> bool:
+    """Remove legacy persisted ADO PAT values before loading backend settings."""
+    os.environ.pop("ADO_PAT", None)
+    if not env_path.exists():
+        return False
+
+    original = env_path.read_text(encoding="utf-8")
+    lines = original.splitlines(keepends=True)
+    filtered = [
+        line
+        for line in lines
+        if not re.match(r"^\s*(?:export\s+)?ADO_PAT\s*=", line)
+    ]
+    updated = "".join(filtered)
+    if updated == original:
+        return False
+
+    env_path.write_text(updated, encoding="utf-8")
+    return True
+
+
+# Migration/security guard: ADO PAT is session-only and must never be loaded from .env.
+purge_persisted_ado_pat()
+load_dotenv(ENV_PATH)
 
 
 @dataclass(frozen=True)
@@ -24,6 +53,9 @@ class AppConfig:
         return AppConfig(
             ado_organization=os.getenv("ADO_ORGANIZATION", "aspentechnology"),
             ado_project=os.getenv("ADO_PROJECT", "AspenTech SAFe"),
+            # Runtime ADO routes receive PAT from services.ado_session instead.
+            # Keeping this environment read supports direct AdoClient unit tests only;
+            # config import removes any persisted/process ADO_PAT at application startup.
             ado_pat=os.getenv("ADO_PAT", ""),
             ado_api_version=os.getenv("ADO_API_VERSION", "7.1"),
             ai_provider=os.getenv("AI_PROVIDER", "github"),

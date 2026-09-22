@@ -15,7 +15,7 @@ A lightweight Python + HTML/CSS/JavaScript assistant for Azure DevOps work items
 - Includes a floating AI chatbox in the frontend.
 - Includes a local Setup page for Azure DevOps connection settings.
 - Shows live ADO connection state and a glowing local app running/stopped indicator.
-- Keeps all secrets in backend `.env` only. No PAT or GitHub token is exposed to frontend code.
+- Keeps the ADO PAT in backend process memory only for the current app session. AI tokens remain backend-only. No secret is exposed to frontend code.
 
 ## Project Structure
 
@@ -122,7 +122,7 @@ ADO project        (defaults to AspenTech SAFe)
 ADO PAT
 ```
 
-The PAT field is blank by default and the PAT is never returned to the frontend. `Connect to ADO` stays disabled until organization, project, and PAT are all filled. Clicking it saves the three values into `backend/.env` and then connects using the saved configuration. While ADO is being checked, the header shows an animated `Connecting to ADO…` indicator; the connection request times out after 30 seconds. On success the header shows `ADO connected`, the PAT field is cleared, and the button becomes disabled again. Existing saved configuration is still checked automatically when the app starts.
+The PAT field is blank by default and the PAT is never returned to the frontend. `Connect to ADO` stays disabled until organization, project, and PAT are all filled. Clicking it persists only the non-secret organization/project settings, tests the connection, and keeps the PAT only in backend process memory for the current app session. While ADO is being checked, the header shows an animated `Connecting to ADO…` indicator; the connection request times out after 30 seconds. On success the header shows `ADO connected`, the PAT field is cleared, and the button becomes disabled again. After the backend process terminates, the PAT is gone; the next launch starts as `ADO not connected` and requires the PAT again. Legacy `ADO_PAT` entries are removed from `backend/.env` at backend startup.
 
 AI settings remain backend environment configuration for now and are not exposed on the Setup page.
 
@@ -135,7 +135,6 @@ Copy-Item .env.example .env
 ```env
 ADO_ORGANIZATION=your-org
 ADO_PROJECT=your-project
-ADO_PAT=your-ado-pat
 AI_PROVIDER=github
 AI_BASE_URL=https://models.github.ai/inference
 AI_MODEL=openai/gpt-4.1-mini
@@ -144,4 +143,4 @@ GITHUB_TOKEN=your-github-token
 
 ## Security Rule
 
-Never put `ADO_PAT`, `GITHUB_TOKEN`, or other secrets in frontend files. The frontend calls backend endpoints only. The backend reads secrets from `.env`.
+Never put `ADO_PAT`, `GITHUB_TOKEN`, or other secrets in frontend files. The ADO PAT is session-only and must not be written to `.env`, JSON, browser storage, logs, or other persistent files. AI credentials remain backend environment configuration.
