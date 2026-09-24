@@ -1,65 +1,29 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
-const vm = require('node:vm');
 
-function loadUtils() {
-  const context = vm.createContext({
-    window: {},
-    document: { querySelector() { return null; } },
-  });
-  vm.runInContext(fs.readFileSync('frontend/result-tracker-grid.js', 'utf8'), context);
-  return context.window.ResultTrackerGridUtils;
-}
+const source = fs.readFileSync('frontend/test-assignment-workbook.js', 'utf8');
+const index = fs.readFileSync('frontend/index.html', 'utf8');
 
-test('parses Result CSV by Test ID and Result', () => {
-  const utils = loadUtils();
-  const rows = utils.parseResultCsv('\uFEFFTest ID,Result,Logged time\nVSTS118015,Passed,now\nVSTS117749,Failed,now\n');
-  assert.deepEqual(JSON.parse(JSON.stringify(rows)), [
-    { testCaseId: '118015', result: 'Passed' },
-    { testCaseId: '117749', result: 'Failed' },
-  ]);
+test('Result Tracker is an ingestion/staging page rather than an editable spreadsheet', () => {
+  assert.match(source, /Bring in results/);
+  assert.match(source, /Ready-to-log preview/);
+  assert.match(source, /This table is read-only/);
+  assert.doesNotMatch(source, /tracking-result-select/);
+  assert.doesNotMatch(index, /result-tracker-grid\.js/);
 });
 
-test('parses pasted TestResult VSTS rows and ignores group rows', () => {
-  const utils = loadUtils();
-  const rows = utils.parseTestResultTxt('Test\tDuration\nClass: Sample Passed Stale\nVSTS24153 Passed Stale\t5.5 min\nVSTS24846 Failed Stale\t4.7 min\n');
-  assert.deepEqual(JSON.parse(JSON.stringify(rows)), [
-    { testCaseId: '24153', result: 'Passed' },
-    { testCaseId: '24846', result: 'Failed' },
-  ]);
-});
-
-test('Passed wins when imported sources disagree', () => {
-  const utils = loadUtils();
-  assert.equal(utils.mergeResult('Passed', 'Failed'), 'Passed');
-  assert.equal(utils.mergeResult('Failed', 'Passed'), 'Passed');
-  assert.equal(utils.mergeResult('', 'Failed'), 'Failed');
-});
-
-test('Result Tracker uses a paste box instead of TestResult TXT file import', () => {
-  const source = fs.readFileSync('frontend/result-tracker-grid.js', 'utf8');
+test('Result Tracker accepts CSV, TXT, and pasted TestResult output', () => {
+  assert.match(source, /id="importResultCsv"/);
+  assert.match(source, /id="importResultTxt"/);
   assert.match(source, /id="testResultPaste"/);
   assert.match(source, /Apply Pasted Results/);
-  assert.match(source, /parseTestResultTxt\(pasteInput\.value\)/);
-  assert.doesNotMatch(source, /id="importTestResultTxt"/);
-  assert.doesNotMatch(source, /id="testResultTxtFile"/);
+  assert.match(source, /parseResultCsv/);
+  assert.match(source, /parseTestResultTxt/);
 });
 
-
-test('Result Tracker adds requested column filters and freezes ID and Title', () => {
-  const source = fs.readFileSync('frontend/result-tracker-grid.js', 'utf8');
-  const css = fs.readFileSync('frontend/result-tracker-grid.css', 'utf8');
-
-  assert.match(source, /Search ID/);
-  assert.match(source, /Search title/);
-  assert.match(source, /Search automation script/);
-  assert.match(source, /Filter Product Area/);
-  assert.match(source, /__EMPTY__/);
-  assert.match(source, /applyFilters/);
-
-  assert.match(css, /nth-child\(1\)/);
-  assert.match(css, /nth-child\(2\)/);
-  assert.match(css, /--assignment-col1-width/);
-  assert.match(css, /position:\s*sticky/);
+test('preview contains only the fields needed to review logging', () => {
+  for (const heading of ['Test Case ID', 'Title', 'Imported Result', 'Latest ADO Status', 'Action']) {
+    assert.match(source, new RegExp(heading));
+  }
 });
