@@ -11,6 +11,7 @@
   let latestAdoByCase = new Map();
   let previewRows = [];
   let previewFresh = false;
+  let updateInFlight = false;
   let sessionMeta = { planId: null, suiteId: null, tester: '' };
 
   const section = document.createElement('section');
@@ -340,12 +341,32 @@
     refreshImportControls();
   }
 
+  function refreshUpdateButton() {
+    // A failed validation/request must never strand the user with a disabled
+    // Update button. As soon as the user edits either input, allow a retry.
+    updateButton.disabled = updateInFlight;
+  }
+
+  function handleAssignmentInputChanged() {
+    if (!updateInFlight) refreshUpdateButton();
+    if (status.classList.contains('error')) {
+      status.classList.remove('error');
+      status.classList.remove('ok');
+      status.textContent = 'Input changed. Click Update from ADO to try again.';
+    }
+  }
+
+  urlInput.addEventListener('input', handleAssignmentInputChanged);
+  testerInput.addEventListener('input', handleAssignmentInputChanged);
+
   async function updateFromAdo() {
     if (!urlInput.value.trim() || !testerInput.value.trim()) {
       setStatus('Test Plan URL and Assigned tester are required.', true);
+      refreshUpdateButton();
       return;
     }
-    updateButton.disabled = true;
+    updateInFlight = true;
+    refreshUpdateButton();
     setStatus('Updating assigned test cases from ADO…');
     try {
       const response = await fetch('/api/test-plans/assignment-preview', {
@@ -374,7 +395,8 @@
     } catch (error) {
       setStatus(error.message || 'Unable to update from ADO.', true);
     } finally {
-      updateButton.disabled = false;
+      updateInFlight = false;
+      refreshUpdateButton();
       refreshImportControls();
     }
   }
