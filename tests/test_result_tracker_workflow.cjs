@@ -25,3 +25,13 @@ test('legacy editable tracker workflow assets are no longer loaded', () => {
   assert.doesNotMatch(tabs, /result-tracker-logged-ado\.js/);
   assert.doesNotMatch(tabs, /ote-transfer\.js/);
 });
+
+
+test('Update from ADO is retryable after invalid or incomplete input', () => {
+  assert.match(source, /let updateInFlight = false/);
+  assert.match(source, /function refreshUpdateButton\(\)/);
+  assert.match(source, /urlInput\.addEventListener\('input', handleAssignmentInputChanged\)/);
+  assert.match(source, /testerInput\.addEventListener\('input', handleAssignmentInputChanged\)/);
+  assert.match(source, /Input changed\. Click Update from ADO to try again\./);
+  assert.match(source, /finally \{[\s\S]*updateInFlight = false;[\s\S]*refreshUpdateButton\(\)/);
+});
