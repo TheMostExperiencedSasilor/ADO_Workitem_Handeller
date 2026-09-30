@@ -20,6 +20,7 @@ function loadApp() {
       querySelectorAll() { return []; }, createElement: element, createDocumentFragment: element,
     },
     fetch: async () => ({ ok: true, json: async () => ({}) }),
+    window: { setInterval() {} },
     navigator: { clipboard: { writeText: async (text) => { context.copied = text; } } },
   });
   vm.runInContext(fs.readFileSync('frontend/app.js', 'utf8'), context);

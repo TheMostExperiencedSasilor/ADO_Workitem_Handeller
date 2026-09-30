@@ -53,6 +53,7 @@
       <div class="action-row">
         <button id="connectAdoButton" type="button" disabled>Connect to ADO</button>
       </div>
+      <p id="setupError" class="setup-error" role="alert" hidden></p>
     </section>
 
     <section class="panel test-plan-panel" aria-label="Test Results">
@@ -156,7 +157,7 @@
       <div class="work-page active" data-work-page="feature" role="tabpanel">
         <div class="work-page-heading">
           <div><h3>Feature</h3><p>Page shell for feature-level planning and AI-assisted breakdown.</p></div>
-          <span class="type-pill">Creatable</span>
+          <span class="type-pill">Page shell</span>
         </div>
         <div class="page-block-grid">
           <div class="page-block"><strong>Overview block</strong><span>Scope, goal, owner, target release.</span></div>
@@ -168,7 +169,7 @@
       <div class="work-page" data-work-page="objective" role="tabpanel" hidden>
         <div class="work-page-heading">
           <div><h3>Objective</h3><p>Page shell for objective review, SMART checks, and measurable outcomes.</p></div>
-          <span class="type-pill muted-pill">Analyze first</span>
+          <span class="type-pill muted-pill">Page shell</span>
         </div>
         <div class="page-block-grid">
           <div class="page-block"><strong>SMART block</strong><span>Specific, measurable, achievable, relevant, time-bound.</span></div>
@@ -180,7 +181,7 @@
       <div class="work-page" data-work-page="post-development-bug" role="tabpanel" hidden>
         <div class="work-page-heading">
           <div><h3>Post Development Bug</h3><p>Page shell for bug triage after development work has started or completed.</p></div>
-          <span class="type-pill muted-pill">Analyze first</span>
+          <span class="type-pill muted-pill">Page shell</span>
         </div>
         <div class="page-block-grid">
           <div class="page-block"><strong>Triage block</strong><span>Impact, severity, repro confidence, affected area.</span></div>
@@ -192,7 +193,7 @@
       <div class="work-page" data-work-page="task" role="tabpanel" hidden>
         <div class="work-page-heading">
           <div><h3>Task</h3><p>Page shell for small executable work items with clear completion criteria.</p></div>
-          <span class="type-pill">Creatable</span>
+          <span class="type-pill">Page shell</span>
         </div>
         <div class="page-block-grid">
           <div class="page-block"><strong>Task detail block</strong><span>What to do, constraints, expected output.</span></div>
@@ -204,7 +205,7 @@
       <div class="work-page" data-work-page="test-case" role="tabpanel" hidden>
         <div class="work-page-heading">
           <div><h3>Test Case</h3><p>Page shell for structured test design and validation coverage.</p></div>
-          <span class="type-pill muted-pill">Analyze first</span>
+          <span class="type-pill muted-pill">Page shell</span>
         </div>
         <div class="page-block-grid">
           <div class="page-block"><strong>Preconditions block</strong><span>Setup, data, environment, version.</span></div>
@@ -216,7 +217,7 @@
       <div class="work-page" data-work-page="user-story" role="tabpanel" hidden>
         <div class="work-page-heading">
           <div><h3>User Story</h3><p>Page shell for user value, acceptance criteria, and delivery tasks.</p></div>
-          <span class="type-pill">Creatable</span>
+          <span class="type-pill">Page shell</span>
         </div>
         <div class="page-block-grid">
           <div class="page-block"><strong>Story block</strong><span>As a user, I want, so that.</span></div>
@@ -226,65 +227,6 @@
       </div>
     </section>
 
-    <section class="panel">
-      <h2>Read work items</h2>
-      <label for="readIds">Work item IDs</label>
-      <input id="readIds" type="text" placeholder="12345, 67890">
-      <button id="readButton">Read from ADO</button>
-    </section>
-
-    <section class="panel">
-      <h2>Analyze</h2>
-      <label for="analysisInstruction">Analysis instruction</label>
-      <textarea id="analysisInstruction" rows="4" placeholder="Find missing acceptance criteria and suggest child tasks"></textarea>
-      <button id="analyzeButton">Analyze selected IDs</button>
-    </section>
-
-    <section class="panel">
-      <h2>Draft</h2>
-      <label for="draftRequest">Draft request</label>
-      <textarea id="draftRequest" rows="4" placeholder="Write three tasks based on the selected Feature"></textarea>
-      <button id="draftButton">Draft with AI</button>
-    </section>
-
-    <section class="panel write-panel">
-      <h2>Create or edit work item</h2>
-      <div class="field-row">
-        <div>
-          <label for="workItemType">Type</label>
-          <select id="workItemType">
-            <option>Task</option>
-            <option>User Story</option>
-            <option>Feature</option>
-          </select>
-        </div>
-        <div>
-          <label for="parentId">Parent ID</label>
-          <input id="parentId" type="text" placeholder="Optional for create">
-        </div>
-        <div>
-          <label for="updateId">Update ID</label>
-          <input id="updateId" type="text" placeholder="Required for edit">
-        </div>
-      </div>
-      <label for="title">Title</label>
-      <input id="title" type="text" placeholder="Clear work item title">
-      <label for="description">Description</label>
-      <textarea id="description" rows="5" placeholder="Problem, expected outcome, constraints"></textarea>
-      <div class="checkbox-row">
-        <label><input id="ruleSmart" type="checkbox" checked> SMART table</label>
-        <label><input id="ruleSplit" type="checkbox"> Split one into three</label>
-      </div>
-      <div class="action-row">
-        <button id="createButton">Create in ADO</button>
-        <button id="updateButton" class="secondary-button">Update existing</button>
-      </div>
-    </section>
-
-    <section class="panel output-panel">
-      <h2>Output</h2>
-      <pre id="output">Ready.</pre>
-    </section>
   </main>
 
   <button id="chatToggle" class="chat-toggle">AI</button>

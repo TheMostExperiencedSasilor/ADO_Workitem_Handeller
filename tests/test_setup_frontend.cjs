@@ -38,7 +38,8 @@ test('Connect to ADO is a single session connection request', () => {
   const connectBody = js.slice(connectStart, js.indexOf("document.querySelectorAll('.work-tab')", connectStart));
   assert.match(connectBody, /api\('\/api\/setup', \{/);
   assert.doesNotMatch(connectBody, /\/api\/setup\/ado-connection/);
-  assert.match(connectBody, /patPersisted: false/);
+  assert.match(connectBody, /adoPatInput\.value = ''/);
+  assert.match(connectBody, /setSetupError\(error\.message\)/);
 });
 
 test('ADO connection keeps the indeterminate progress indicator', () => {

@@ -1,38 +1,16 @@
-const output = document.querySelector('#output');
 const healthBadge = document.querySelector('#healthBadge');
 const healthStatusText = document.querySelector('#healthStatusText');
 const adoConnectionBadge = document.querySelector('#adoConnectionBadge');
 const adoConnectionText = document.querySelector('#adoConnectionText');
 const adoConnectionProgress = document.querySelector('#adoConnectionProgress');
 const setupStatus = document.querySelector('#setupStatus');
+const setupError = document.querySelector('#setupError');
 const adoOrganizationInput = document.querySelector('#adoOrganization');
 const adoProjectInput = document.querySelector('#adoProject');
 const adoPatInput = document.querySelector('#adoPat');
 const connectAdoButton = document.querySelector('#connectAdoButton');
-const readIds = document.querySelector('#readIds');
 
 let adoConnecting = false;
-
-const creatableTabTypes = {
-  feature: 'Feature',
-  task: 'Task',
-  'user-story': 'User Story',
-};
-
-function parseIds() {
-  return readIds.value
-    .split(',')
-    .map((value) => value.trim())
-    .filter(Boolean)
-    .map(Number);
-}
-
-function selectedRules() {
-  const rules = [];
-  if (document.querySelector('#ruleSmart').checked) rules.push('smart');
-  if (document.querySelector('#ruleSplit').checked) rules.push('split_into_three');
-  return rules;
-}
 
 function setupPayload() {
   return {
@@ -53,28 +31,19 @@ function updateConnectAdoButtonState() {
 
 function markSetupDirty() {
   setSetupStatus('Unsaved changes');
+  setSetupError();
   updateConnectAdoButtonState();
-}
-
-function writePayload() {
-  const parentText = document.querySelector('#parentId').value.trim();
-  return {
-    type: document.querySelector('#workItemType').value,
-    title: document.querySelector('#title').value,
-    description: document.querySelector('#description').value,
-    parentId: parentText ? Number(parentText) : null,
-    rules: selectedRules(),
-  };
-}
-
-function show(data) {
-  output.textContent = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
 }
 
 function setSetupStatus(text, state = '') {
   setupStatus.textContent = text;
   setupStatus.classList.remove('ok', 'error');
   if (state) setupStatus.classList.add(state);
+}
+
+function setSetupError(message = '') {
+  setupError.textContent = message;
+  setupError.hidden = !message;
 }
 
 function setAdoConnection(text, state = '') {
@@ -96,10 +65,6 @@ function activateWorkTab(tabName) {
     page.classList.toggle('active', active);
     page.hidden = !active;
   });
-
-  if (creatableTabTypes[tabName]) {
-    document.querySelector('#workItemType').value = creatableTabTypes[tabName];
-  }
 }
 
 async function api(path, options = {}) {
@@ -138,6 +103,7 @@ async function checkSetup() {
     adoPatInput.value = '';
     adoPatInput.placeholder = 'Enter your Personal Access Token';
     updateConnectAdoButtonState();
+    setSetupError();
 
     if (status.adoConnected) {
       setSetupStatus('Connected', 'ok');
@@ -146,11 +112,10 @@ async function checkSetup() {
       setSetupStatus('Not connected');
       setAdoConnection('ADO not connected', 'error');
     }
-    show(status);
   } catch (error) {
     setSetupStatus('Setup check failed', 'error');
     setAdoConnection('ADO not connected', 'error');
-    show(error.message);
+    setSetupError(error.message);
   }
 }
 
@@ -160,9 +125,10 @@ async function connectToAdo() {
   adoConnecting = true;
   updateConnectAdoButtonState();
   setAdoConnection('Connecting to ADO…', 'connecting');
+  setSetupError();
 
   try {
-    const result = await api('/api/setup', {
+    await api('/api/setup', {
       method: 'POST',
       body: JSON.stringify(setupPayload()),
     });
@@ -171,16 +137,10 @@ async function connectToAdo() {
 
     // PAT exists only in backend process memory after a successful connection.
     adoPatInput.value = '';
-    show({
-      message: 'ADO connected for this app session.',
-      savedKeys: result.savedKeys || [],
-      patPersisted: false,
-      project: result.project || null,
-    });
   } catch (error) {
     setSetupStatus('Not connected', 'error');
     setAdoConnection('ADO not connected', 'error');
-    show(error.message);
+    setSetupError(error.message);
   } finally {
     adoConnecting = false;
     updateConnectAdoButtonState();
@@ -196,77 +156,6 @@ for (const input of [adoOrganizationInput, adoProjectInput, adoPatInput]) {
   input.addEventListener('input', markSetupDirty);
 }
 updateConnectAdoButtonState();
-
-document.querySelector('#readButton').addEventListener('click', async () => {
-  try {
-    show('Reading work items...');
-    show(await api('/api/work-items/read', {
-      method: 'POST',
-      body: JSON.stringify({ ids: parseIds() }),
-    }));
-  } catch (error) {
-    show(error.message);
-  }
-});
-
-document.querySelector('#analyzeButton').addEventListener('click', async () => {
-  try {
-    show('Analyzing work items...');
-    show(await api('/api/work-items/analyze', {
-      method: 'POST',
-      body: JSON.stringify({
-        ids: parseIds(),
-        instruction: document.querySelector('#analysisInstruction').value,
-      }),
-    }));
-  } catch (error) {
-    show(error.message);
-  }
-});
-
-document.querySelector('#draftButton').addEventListener('click', async () => {
-  try {
-    show('Drafting work items...');
-    show(await api('/api/work-items/draft', {
-      method: 'POST',
-      body: JSON.stringify({
-        ids: parseIds(),
-        request: document.querySelector('#draftRequest').value,
-        rules: selectedRules(),
-      }),
-    }));
-  } catch (error) {
-    show(error.message);
-  }
-});
-
-document.querySelector('#createButton').addEventListener('click', async () => {
-  try {
-    show('Creating work item...');
-    show(await api('/api/work-items/create', {
-      method: 'POST',
-      body: JSON.stringify(writePayload()),
-    }));
-  } catch (error) {
-    show(error.message);
-  }
-});
-
-document.querySelector('#updateButton').addEventListener('click', async () => {
-  try {
-    const updateId = document.querySelector('#updateId').value.trim();
-    if (!updateId) {
-      throw new Error('Update ID is required for edit.');
-    }
-    show('Updating work item...');
-    show(await api(`/api/work-items/${Number(updateId)}`, {
-      method: 'PATCH',
-      body: JSON.stringify(writePayload()),
-    }));
-  } catch (error) {
-    show(error.message);
-  }
-});
 
 const chatToggle = document.querySelector('#chatToggle');
 const chatbox = document.querySelector('#chatbox');
@@ -297,7 +186,7 @@ chatForm.addEventListener('submit', async (event) => {
   try {
     const data = await api('/api/chat', {
       method: 'POST',
-      body: JSON.stringify({ message, ids: parseIds() }),
+      body: JSON.stringify({ message }),
     });
     thinkingNode.textContent = data.answer;
   } catch (error) {
@@ -309,7 +198,7 @@ checkHealth();
 window.setInterval(checkHealth, 2000);
 checkSetup();
 
-// Test Plan / Suite is independent of the work-item tabs and their output.
+// Test Plan / Suite data is rendered within the Test Results tab.
 let testSuitePoints = [];
 let visibleTestPoints = [];
 const testRowHeights = new Map();

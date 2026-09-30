@@ -4,11 +4,9 @@ A lightweight Python + HTML/CSS/JavaScript assistant for Azure DevOps work items
 
 ## Core Features
 
-- Read Azure DevOps work items by ID using a Personal Access Token (PAT).
-- Supports work item workflows for Objective, Bug, Post Development Bug, User Story, Feature, Task, and Test Case.
-- Analyze work item content through a backend AI service using a GitHub token or another OpenAI-compatible AI endpoint.
-- Create or edit Azure DevOps work items such as Task, User Story, and Feature.
-- Apply writing rules such as SMART checks and splitting one large item into smaller work items.
+- Read Azure DevOps test case details through Test Planner using a Personal Access Token (PAT).
+- Show page shells for Objective, Post Development Bug, User Story, Feature, Task, and Test Case under Work Items.
+- Chat through a backend AI service using a GitHub token or another OpenAI-compatible AI endpoint.
 - Test Results workspace with Summary, Test Planner, Result Tracker, and Charts.
 - Test Planner can select ADO test cases and generate Visual Studio UFT `.playlist` files directly in the web app.
 - Result Tracker supports editable result grids, JSON save/open, Excel export, ADO Test Run publishing, and optional OTE workbook transfer.

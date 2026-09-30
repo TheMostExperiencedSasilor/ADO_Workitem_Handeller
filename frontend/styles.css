@@ -184,9 +184,7 @@ h3 {
 }
 
 .setup-panel,
-.work-type-panel,
-.write-panel,
-.output-panel {
+.work-type-panel {
   grid-column: span 3;
 }
 
@@ -219,6 +217,11 @@ h3 {
   color: var(--danger);
   border-color: #f3aaa4;
   background: #fff1f0;
+}
+
+.setup-error {
+  color: var(--danger);
+  margin: 12px 0 0;
 }
 
 .work-tabs {
@@ -548,9 +551,7 @@ pre {
   }
 
   .setup-panel,
-  .work-type-panel,
-  .write-panel,
-  .output-panel {
+  .work-type-panel {
     grid-column: auto;
   }
 
