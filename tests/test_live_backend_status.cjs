@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const html = fs.readFileSync('frontend/index.html', 'utf8');
 const js = fs.readFileSync('frontend/app.js', 'utf8');
 const css = fs.readFileSync('frontend/styles.css', 'utf8');
-const vbs = fs.readFileSync('launcher/Start-Windows.vbs', 'utf8');
+const windowsLauncher = fs.readFileSync('launcher/Start-Windows.ps1', 'utf8');
 
 test('browser header has a glowing live app status indicator', () => {
   assert.match(html, /id="healthBadge"[^>]*backend-status/);
@@ -21,6 +21,7 @@ test('health status continuously switches between running and stopped', () => {
   assert.match(js, /window\.setInterval\(checkHealth, 2000\)/);
 });
 
-test('Windows VBS launcher stays hidden and exits after bootstrap finishes', () => {
-  assert.match(vbs, /shell\.Run\(command, 0, True\)/);
+test('Windows launcher waits for bootstrap then exits while backend stays detached', () => {
+  assert.match(windowsLauncher, /\$process\.WaitForExit\(\)/);
+  assert.match(windowsLauncher, /-WindowStyle Hidden -PassThru/);
 });

@@ -3,11 +3,6 @@
     'Setup',
     'Test Results',
     'Work Items',
-    'Read',
-    'Analyze',
-    'Draft',
-    'Create / Edit',
-    'Output',
   ];
 
   const DEFAULT_TAB_INDEX = 0;

@@ -23,12 +23,10 @@ Browser UI
 
 - `app.py`: Flask app factory, route registration, frontend hosting.
 - `config.py`: environment variable loading and validation.
-- `services/ado_client.py`: Azure DevOps REST API read/create/update/connection-test operations.
-- `services/ai_client.py`: AI analysis, drafting, and chat calls.
-- `services/work_item_builder.py`: validates write payloads and prepares ADO fields.
-- `rules/writing_rules.py`: deterministic SMART and split rules.
+- `services/ado_client.py`: Azure DevOps REST API reads, test run updates, and connection checks.
+- `services/ai_client.py`: AI chat calls.
 - `routes/setup_routes.py`: local setup status, `.env` writing, and ADO connection status endpoints.
-- `routes/work_item_routes.py`: work item read/analyze/draft/create/update endpoints.
+- `routes/work_item_routes.py`: work item read endpoint used by Test Planner.
 - `routes/chat_routes.py`: floating chatbox endpoint.
 
 ## API Endpoints
@@ -38,20 +36,8 @@ Browser UI
 - `GET /api/setup/ado-connection`
 - `POST /api/setup`
 - `POST /api/work-items/read`
-- `POST /api/work-items/analyze`
-- `POST /api/work-items/draft`
-- `POST /api/work-items/create`
-- `PATCH /api/work-items/<id>`
 - `POST /api/chat`
 
 ## Work Item Types
 
-Input analysis can handle any work item returned by ADO, including Objective, Bug, Post Development Bug, User Story, Feature, and Epic.
-
-Creation is intentionally limited to:
-
-- Task
-- User Story
-- Feature
-
-This keeps the first version safer and avoids accidentally creating unsupported process-specific types.
+The Work Items section currently contains informational page shells for several work item types. Test Planner continues to read test case titles by ID through the shared work-item read endpoint.
