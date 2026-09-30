@@ -24,7 +24,9 @@ ADO_Workitem_Handeller/
 ├── backend/
 ├── frontend/
 ├── launcher/
-│   ├── Start-Windows.vbs
+│   ├── ADOWorkItemLauncher.exe
+│   ├── Start-Windows.ps1       # editable source, not the user entry point
+│   ├── build_launcher.ps1
 │   ├── Start-Unix.command
 │   └── Start-Linux.sh
 ├── docs/
@@ -52,10 +54,18 @@ The backend keeps running after the launcher exits. If it is already running, us
 Double-click:
 
 ```text
-launcher/Start-Windows.vbs
+launcher/ADOWorkItemLauncher.exe
 ```
 
-This launcher calls Python directly and **does not go through a BAT file**. It prefers `pythonw.exe`, so Command Prompt / Windows Terminal should not appear. First-run dependency installation is also launched with the Windows `CREATE_NO_WINDOW` flag.
+The EXE is built from `Start-Windows.ps1` with ps2exe `-noConsole`. It uses
+`pythonw.exe` (or `pyw.exe` on first run), waits for `start_app.py` to finish
+setup and open the browser, and then closes automatically. The Flask backend is
+detached and keeps running; no launcher console needs to stay open. Startup
+errors are shown in a dialog and recorded in `logs/launcher.log`.
+
+To rebuild the EXE on Windows after editing the PowerShell source, install
+ps2exe and run `launcher/build_launcher.ps1`. GitHub Actions also rebuilds the
+EXE when the launcher source or build script changes.
 
 ### macOS / Unix
 
