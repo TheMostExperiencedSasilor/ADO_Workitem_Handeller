@@ -3,6 +3,7 @@
     'Setup',
     'Test Results',
     'Work Items',
+    'Repo Tracker',
   ];
 
   const DEFAULT_TAB_INDEX = 0;

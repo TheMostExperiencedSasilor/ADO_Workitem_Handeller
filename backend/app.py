@@ -10,6 +10,7 @@ from routes.work_item_routes import work_items_bp
 from routes.test_plan_routes import test_plans_bp
 from routes.test_assignment_workbook_routes import assignment_workbook_bp
 from routes.logged_ado_results_routes import logged_ado_results_bp
+from routes.repo_history_routes import repo_history_bp
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
 FRONTEND_DIR = ROOT_DIR / "frontend"
@@ -25,6 +26,7 @@ def create_app() -> Flask:
     app.register_blueprint(test_plans_bp)
     app.register_blueprint(assignment_workbook_bp)
     app.register_blueprint(logged_ado_results_bp)
+    app.register_blueprint(repo_history_bp)
 
     @app.get("/api/health")
     def health():
