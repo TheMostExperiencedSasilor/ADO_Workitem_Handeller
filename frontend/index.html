@@ -254,8 +254,11 @@
       <dialog id="repoSummaryDialog" aria-labelledby="repoSummaryTitle">
         <div class="repo-summary-heading"><h3 id="repoSummaryTitle">Summary</h3><button type="button" id="repoSummaryClose" aria-label="Close summary">×</button></div>
         <label for="repoSummaryText">Summary text</label>
-        <textarea id="repoSummaryText" rows="14"></textarea>
-        <div class="repo-summary-actions"><button type="button" id="repoSummaryCopy">Copy</button><span id="repoSummaryMessage" role="status"></span></div>
+        <div class="repo-summary-editor">
+          <textarea id="repoSummaryText" rows="14"></textarea>
+          <button type="button" id="repoSummaryCopy" aria-label="Copy summary" title="Copy summary"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="8" y="8" width="11" height="11" rx="2"></rect><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"></path></svg></button>
+        </div>
+        <span id="repoSummaryMessage" role="status"></span>
       </dialog>
       <p id="repoCount" role="status"></p>
       <nav class="repo-pagination" aria-label="History pages">

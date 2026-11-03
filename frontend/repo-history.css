@@ -11,5 +11,9 @@
 #repoSummaryDialog::backdrop { background:rgba(0,0,0,.35); }
 .repo-summary-heading { display:flex; justify-content:space-between; align-items:center; gap:12px; }
 .repo-summary-heading h3 { margin:0 0 12px; }
-#repoSummaryText { display:block; width:100%; min-height:260px; resize:vertical; box-sizing:border-box; margin-top:6px; }
-.repo-summary-actions { display:flex; align-items:center; gap:10px; margin-top:12px; }
+#repoSummaryText { display:block; width:100%; min-height:260px; resize:vertical; box-sizing:border-box; padding:12px 48px 12px 12px; }
+.repo-summary-editor { position:relative; margin-top:6px; }
+#repoSummaryCopy { position:absolute; top:8px; right:8px; display:flex; align-items:center; justify-content:center; width:32px; height:32px; padding:0; margin:0; border:1px solid #ccd5e1; border-radius:5px; background:#fff; color:#285c91; cursor:pointer; }
+#repoSummaryCopy:hover { background:#edf4fb; }
+#repoSummaryCopy:focus-visible { outline:2px solid #1762a3; outline-offset:2px; }
+#repoSummaryMessage { display:block; margin-top:6px; }
