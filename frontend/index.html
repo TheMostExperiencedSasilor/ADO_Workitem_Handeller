@@ -251,6 +251,16 @@
         <label class="repo-check"><input id="repoVsts" type="checkbox"> VSTS&lt;number&gt;.cs only</label>
       </div>
       <p id="repoCount" role="status"></p>
+      <nav class="repo-pagination" aria-label="History pages">
+        <label>Rows per page <select id="repoPageSize"><option>10</option><option selected>20</option><option>30</option></select></label>
+        <button type="button" id="repoFirst" aria-label="First page">«</button>
+        <button type="button" id="repoPrev" aria-label="Previous page">‹</button>
+        <label>Page <input id="repoPage" type="number" min="1" value="1"></label><span id="repoPageTotal">of 0</span>
+        <button type="button" id="repoGo">Go</button>
+        <button type="button" id="repoNext" aria-label="Next page">›</button>
+        <button type="button" id="repoLast" aria-label="Last loaded page">»</button>
+        <span id="repoPageMessage" role="status"></span>
+      </nav>
       <div class="repo-table-wrap"><table class="repo-table"><thead><tr><th><button data-sort="date">Date ↕</button></th><th><button data-sort="author">Author ↕</button></th><th><button data-sort="path">File ↕</button></th><th><button data-sort="change">Change ↕</button></th><th><button data-sort="message">Commit message ↕</button></th></tr></thead><tbody id="repoRows"></tbody></table></div>
     </section>
   </main>
