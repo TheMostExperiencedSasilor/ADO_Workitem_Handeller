@@ -11,11 +11,11 @@ test('Setup is the default landing tab when no URL hash selects another page', (
   assert.match(source, /hashIndex >= 0 \? hashIndex : DEFAULT_TAB_INDEX/);
 });
 
-test('only Setup, Test Results, and Work Items remain as main tabs', () => {
+test('Repo Tracker appears alongside the existing main tabs', () => {
   const labels = source.match(/const TAB_LABELS = \[([\s\S]*?)\];/)[1];
   assert.deepEqual([...labels.matchAll(/'([^']+)'/g)].map((match) => match[1]),
-    ['Setup', 'Test Results', 'Work Items']);
-  assert.equal((html.match(/<main class="layout">([\s\S]*?)<\/main>/)[1].match(/<section class="panel(?: |")/g) || []).length, 3);
+    ['Setup', 'Test Results', 'Work Items', 'Repo Tracker']);
+  assert.equal((html.match(/<main class="layout">([\s\S]*?)<\/main>/)[1].match(/<section class="panel(?: |")/g) || []).length, 4);
   assert.doesNotMatch(html, /id="(?:readButton|analyzeButton|draftButton|createButton|updateButton|output)"/);
   assert.doesNotMatch(routes, /@work_items_bp\.(?:patch|post)\("\/(?:analyze|draft|create|<int:work_item_id>)/);
   assert.match(routes, /@work_items_bp\.post\("\/read"\)/);

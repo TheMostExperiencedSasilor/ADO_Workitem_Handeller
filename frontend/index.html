@@ -7,6 +7,7 @@
   <link rel="stylesheet" href="styles.css">
   <link rel="stylesheet" href="export-results.css">
   <link rel="stylesheet" href="main-tabs.css">
+  <link rel="stylesheet" href="repo-history.css">
   <link rel="stylesheet" href="test-assignment-workbook.css">
   <link rel="stylesheet" href="test-result-charts.css">
 </head>
@@ -227,6 +228,31 @@
       </div>
     </section>
 
+    <section class="panel repo-history-panel" aria-label="Repo Tracker">
+      <h2>Repo Tracker</h2>
+      <form id="repoConnect" class="repo-connect">
+        <label>Repository URL<input id="repoUrl" type="url" required placeholder="https://organization.visualstudio.com/project/_git/repository"></label>
+        <label>VSTS PAT<input id="repoPat" type="password" required autocomplete="off"></label>
+        <button type="submit">Connect</button>
+        <button id="repoDisconnect" type="button">Disconnect</button>
+      </form>
+      <p id="repoStatus" role="status">Not connected</p>
+      <div class="repo-controls">
+        <label>Branch<select id="repoBranch"></select></label>
+        <button id="repoLoad" type="button" disabled>Load history</button>
+        <button id="repoClear" type="button">Clear filters</button>
+        <button id="repoAll" type="button" hidden>Back to repository history</button>
+      </div>
+      <div class="repo-filters">
+        <label>Author<input id="repoAuthor" type="search"></label>
+        <label>Filename or path<input id="repoFile" type="search"></label>
+        <label>From<input id="repoFrom" type="date"></label>
+        <label>To<input id="repoTo" type="date"></label>
+        <label class="repo-check"><input id="repoVsts" type="checkbox"> VSTS&lt;number&gt;.cs only</label>
+      </div>
+      <p id="repoCount" role="status"></p>
+      <div class="repo-table-wrap"><table class="repo-table"><thead><tr><th><button data-sort="date">Date ↕</button></th><th><button data-sort="author">Author ↕</button></th><th><button data-sort="path">File ↕</button></th><th><button data-sort="change">Change ↕</button></th><th><button data-sort="message">Commit message ↕</button></th></tr></thead><tbody id="repoRows"></tbody></table></div>
+    </section>
   </main>
 
   <button id="chatToggle" class="chat-toggle">AI</button>
@@ -243,6 +269,7 @@
   </aside>
 
   <script src="main-tabs.js"></script>
+  <script src="repo-history.js"></script>
   <script src="app.js"></script>
   <script src="export-results.js"></script>
   <script src="test-assignment-workbook.js"></script>
