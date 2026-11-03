@@ -240,7 +240,9 @@
       <div class="repo-controls">
         <label>Branch<select id="repoBranch"></select></label>
         <button id="repoLoad" type="button" disabled>Load history</button>
+        <label>View<select id="repoView"><option value="files">File Changes</option><option value="commits">Commits / PRs</option></select></label>
         <button id="repoClear" type="button">Clear filters</button>
+        <button id="repoSummary" type="button" disabled>Summary</button>
         <button id="repoAll" type="button" hidden>Back to repository history</button>
       </div>
       <div class="repo-filters">
@@ -250,8 +252,27 @@
         <label>To<input id="repoTo" type="date"></label>
         <label class="repo-check"><input id="repoVsts" type="checkbox"> VSTS&lt;number&gt;.cs only</label>
       </div>
+      <dialog id="repoSummaryDialog" aria-labelledby="repoSummaryTitle">
+        <div class="repo-summary-heading"><h3 id="repoSummaryTitle">Summary</h3><button type="button" id="repoSummaryClose" aria-label="Close summary">×</button></div>
+        <label for="repoSummaryText">Summary text</label>
+        <div class="repo-summary-editor">
+          <textarea id="repoSummaryText" rows="14"></textarea>
+          <button type="button" id="repoSummaryCopy" aria-label="Copy summary" title="Copy summary"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="8" y="8" width="11" height="11" rx="2"></rect><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"></path></svg></button>
+        </div>
+        <span id="repoSummaryMessage" role="status"></span>
+      </dialog>
       <p id="repoCount" role="status"></p>
-      <div class="repo-table-wrap"><table class="repo-table"><thead><tr><th><button data-sort="date">Date ↕</button></th><th><button data-sort="author">Author ↕</button></th><th><button data-sort="path">File ↕</button></th><th><button data-sort="change">Change ↕</button></th><th><button data-sort="message">Commit message ↕</button></th></tr></thead><tbody id="repoRows"></tbody></table></div>
+      <nav class="repo-pagination" aria-label="History pages">
+        <label>Rows per page <select id="repoPageSize"><option>10</option><option selected>20</option><option>30</option></select></label>
+        <button type="button" id="repoFirst" aria-label="First page">«</button>
+        <button type="button" id="repoPrev" aria-label="Previous page">‹</button>
+        <label>Page <input id="repoPage" type="number" min="1" value="1"></label><span id="repoPageTotal">of 0</span>
+        <button type="button" id="repoGo">Go</button>
+        <button type="button" id="repoNext" aria-label="Next page">›</button>
+        <button type="button" id="repoLast" aria-label="Last loaded page">»</button>
+        <span id="repoPageMessage" role="status"></span>
+      </nav>
+      <div class="repo-table-wrap"><table class="repo-table"><thead><tr><th><button data-sort="date">Date <span class="repo-sort-indicator" aria-hidden="true"></span></button></th><th><button data-sort="author">Author <span class="repo-sort-indicator" aria-hidden="true"></span></button></th><th><button data-sort="path">File <span class="repo-sort-indicator" aria-hidden="true"></span></button></th><th><button data-sort="change">Change <span class="repo-sort-indicator" aria-hidden="true"></span></button></th><th><button data-sort="message">Commit message <span class="repo-sort-indicator" aria-hidden="true"></span></button></th></tr></thead><tbody id="repoRows"></tbody></table></div>
     </section>
   </main>
 
