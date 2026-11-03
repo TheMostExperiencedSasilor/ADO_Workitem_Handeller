@@ -57,6 +57,11 @@
   function render() {
     const filtered = matchingRows();
     $('repoSummary').disabled = !hasFilters();
+    document.querySelectorAll('.repo-table th button[data-sort]').forEach(button => {
+      const active = button.dataset.sort === sort;
+      button.querySelector('.repo-sort-indicator').textContent = active ? (ascending ? '▲' : '▼') : '';
+      button.closest('th').setAttribute('aria-sort', active ? (ascending ? 'ascending' : 'descending') : 'none');
+    });
     filtered.sort((a,b)=>String(a[sort]).localeCompare(String(b[sort]))*(ascending?1:-1));
     pageCount = Math.ceil(filtered.length / Number($('repoPageSize').value));
     page = Math.max(1, Math.min(page, pageCount || 1));
@@ -117,5 +122,6 @@
   $('repoNext').onclick=()=>go(page+1); $('repoLast').onclick=()=>go(pageCount);
   function typedPage() { const n=Number($('repoPage').value); if (!Number.isInteger(n) || n<1 || n>pageCount) { $('repoPageMessage').textContent = loading ? 'Page not loaded yet.' : 'Enter an available page number.'; return; } go(n); }
   $('repoGo').onclick=typedPage; $('repoPage').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();typedPage();}};
+  render();
   document.querySelectorAll('.repo-table th button').forEach(button=>button.onclick=()=>{ascending=sort===button.dataset.sort?!ascending:true;sort=button.dataset.sort;render();});
 })();

@@ -17,3 +17,5 @@
 #repoSummaryCopy:hover { background:#edf4fb; }
 #repoSummaryCopy:focus-visible { outline:2px solid #1762a3; outline-offset:2px; }
 #repoSummaryMessage { display:block; margin-top:6px; }
+
+.repo-sort-indicator { display:inline-block; width:1em; font-size:.75em; vertical-align:middle; }
