@@ -1,7 +1,7 @@
 (() => {
   const $ = id => document.getElementById(id);
   let rows = [], selected = null, sort = 'date', ascending = false, generation = 0;
-  let page = 1, pageCount = 0, loading = false;
+  let page = 1, pageCount = 0, loading = false, historyState = 'Not loaded';
   const status = message => { $('repoStatus').textContent = message; };
   async function api(path, options) {
     const response = await fetch('/api/repo-history' + path, options);
@@ -10,7 +10,7 @@
     return data;
   }
   $('repoConnect').addEventListener('submit', async e => {
-    e.preventDefault(); loading = false; page = 1; generation++; $('repoLoad').disabled = true; rows = []; selected = null; render();
+    e.preventDefault(); historyState = 'Not loaded'; loading = false; page = 1; generation++; $('repoLoad').disabled = true; rows = []; selected = null; render();
     const button = e.submitter; button.disabled = true; status('Connecting…');
     try {
       const data = await api('/connect', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({url:$('repoUrl').value, pat:$('repoPat').value})});
@@ -20,9 +20,9 @@
       $('repoLoad').disabled = !data.branches.length; status(`Connected to ${data.name}. Choose a branch and load history.`);
     } catch (err) { status(err.message); } finally { button.disabled = false; }
   });
-  $('repoDisconnect').onclick = async () => { loading = false; page = 1; generation++; try { await api('/disconnect', {method:'POST'}); } catch (_) {} rows=[]; selected=null; $('repoBranch').replaceChildren(); $('repoPat').value=''; $('repoLoad').disabled=true; status('Not connected'); render(); };
+  $('repoDisconnect').onclick = async () => { historyState = 'Not loaded'; loading = false; page = 1; generation++; try { await api('/disconnect', {method:'POST'}); } catch (_) {} rows=[]; selected=null; $('repoBranch').replaceChildren(); $('repoPat').value=''; $('repoLoad').disabled=true; status('Not connected'); render(); };
   $('repoLoad').onclick = async () => {
-    const token = ++generation; rows=[]; selected=null; page=1; loading=true; render(); $('repoLoad').disabled=true;
+    const token = ++generation; rows=[]; selected=null; page=1; loading=true; historyState='Loading — results so far'; render(); $('repoLoad').disabled=true;
     try {
       let skip=0, count=0;
       while (true) {
@@ -45,13 +45,18 @@
         if (data.commits.length < 50) break;
         skip+=data.commits.length;
       }
-      status(`History loaded: ${count} commits on ${$('repoBranch').value}.`);
-    } catch (err) { if(token === generation) status(`History incomplete: ${err.message}`); }
+      historyState='Loaded'; status(`History loaded: ${count} commits on ${$('repoBranch').value}.`);
+    } catch (err) { if(token === generation) { historyState='Incomplete'; status(`History incomplete: ${err.message}`); } }
     finally { if(token === generation) { loading=false; $('repoLoad').disabled=false; render(); } }
   };
-  function render() {
+  function matchingRows() {
     const author=$('repoAuthor').value.toLowerCase(), file=$('repoFile').value.toLowerCase(), from=$('repoFrom').value, to=$('repoTo').value;
     const filtered=rows.filter(r => (!selected || r.path===selected) && (r.author+' '+r.email).toLowerCase().includes(author) && r.path.toLowerCase().includes(file) && (!from || r.date.slice(0,10)>=from) && (!to || r.date.slice(0,10)<=to) && (!$('repoVsts').checked || /(?:^|\/)VSTS\d+\.cs$/i.test(r.path)));
+    return filtered;
+  }
+  function render() {
+    const filtered = matchingRows();
+    $('repoSummary').disabled = !hasFilters();
     filtered.sort((a,b)=>String(a[sort]).localeCompare(String(b[sort]))*(ascending?1:-1));
     pageCount = Math.ceil(filtered.length / Number($('repoPageSize').value));
     page = Math.max(1, Math.min(page, pageCount || 1));
@@ -74,6 +79,35 @@
     $('repoAll').hidden=!selected;
     $('repoCount').textContent = `${filtered.length} file changes${loading ? ' loaded so far' : ''}${selected ? ' for ' + selected : ''}`;
   }
+  function hasFilters() {
+    return ['repoAuthor','repoFile','repoFrom','repoTo'].some(id => $(id).value.trim()) || $('repoVsts').checked;
+  }
+  $('repoSummary').onclick = () => {
+    const matched = matchingRows();
+    const filters = [
+      ['Author', $('repoAuthor').value.trim()], ['Filename or path', $('repoFile').value.trim()],
+      ['From', $('repoFrom').value], ['To', $('repoTo').value],
+      ['VSTS<number>.cs only', $('repoVsts').checked ? 'Yes' : '']
+    ].filter(([, value]) => value);
+    const uniqueFiles = new Set(matched.map(row => row.path)).size;
+    const commits = new Set(matched.map(row => row.commit)).size;
+    const authors = new Set(matched.map(row => row.author)).size;
+    $('repoSummaryText').value = [
+      'Repository history summary', `Branch: ${$('repoBranch').value}`,
+      `Status: ${historyState}`,
+      ...filters.map(([label, value]) => `${label}: ${value}`),
+      ...(selected ? [`Selected file: ${selected}`] : []),
+      '', `File changes: ${matched.length}`, `Unique file paths: ${uniqueFiles}`,
+      `Commits: ${commits}`, `Authors: ${authors}`
+    ].join('\n');
+    $('repoSummaryMessage').textContent = '';
+    $('repoSummaryDialog').showModal();
+  };
+  $('repoSummaryClose').onclick=()=>$('repoSummaryDialog').close();
+  $('repoSummaryCopy').onclick=async()=>{
+    try { await navigator.clipboard.writeText($('repoSummaryText').value); $('repoSummaryMessage').textContent='Copied'; }
+    catch (_) { $('repoSummaryMessage').textContent='Copy failed. Select and copy the text.'; }
+  };
   for (const id of ['repoAuthor','repoFile','repoFrom','repoTo','repoVsts']) $(id).addEventListener('input',()=>{page=1;render();});
   $('repoClear').onclick=()=>{page=1;for(const id of ['repoAuthor','repoFile','repoFrom','repoTo']) $(id).value=''; $('repoVsts').checked=false; render();};
   $('repoAll').onclick=()=>{selected=null;page=1;render();};

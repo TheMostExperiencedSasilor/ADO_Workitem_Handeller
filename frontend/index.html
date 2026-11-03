@@ -241,6 +241,7 @@
         <label>Branch<select id="repoBranch"></select></label>
         <button id="repoLoad" type="button" disabled>Load history</button>
         <button id="repoClear" type="button">Clear filters</button>
+        <button id="repoSummary" type="button" disabled>Summary</button>
         <button id="repoAll" type="button" hidden>Back to repository history</button>
       </div>
       <div class="repo-filters">
@@ -250,6 +251,12 @@
         <label>To<input id="repoTo" type="date"></label>
         <label class="repo-check"><input id="repoVsts" type="checkbox"> VSTS&lt;number&gt;.cs only</label>
       </div>
+      <dialog id="repoSummaryDialog" aria-labelledby="repoSummaryTitle">
+        <div class="repo-summary-heading"><h3 id="repoSummaryTitle">Summary</h3><button type="button" id="repoSummaryClose" aria-label="Close summary">×</button></div>
+        <label for="repoSummaryText">Summary text</label>
+        <textarea id="repoSummaryText" rows="14"></textarea>
+        <div class="repo-summary-actions"><button type="button" id="repoSummaryCopy">Copy</button><span id="repoSummaryMessage" role="status"></span></div>
+      </dialog>
       <p id="repoCount" role="status"></p>
       <nav class="repo-pagination" aria-label="History pages">
         <label>Rows per page <select id="repoPageSize"><option>10</option><option selected>20</option><option>30</option></select></label>

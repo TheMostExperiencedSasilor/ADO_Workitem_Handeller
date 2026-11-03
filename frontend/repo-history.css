@@ -6,3 +6,10 @@
 .repo-pagination label { display:flex; align-items:center; gap:6px; margin:0; }
 .repo-pagination button, .repo-pagination select, .repo-pagination input { margin:0; height:36px; min-height:36px; box-sizing:border-box; }
 .repo-pagination input { width:72px; }
+
+#repoSummaryDialog { width:min(640px, calc(100vw - 32px)); max-width:100%; border:1px solid #d9dee8; border-radius:8px; padding:20px; box-sizing:border-box; }
+#repoSummaryDialog::backdrop { background:rgba(0,0,0,.35); }
+.repo-summary-heading { display:flex; justify-content:space-between; align-items:center; gap:12px; }
+.repo-summary-heading h3 { margin:0 0 12px; }
+#repoSummaryText { display:block; width:100%; min-height:260px; resize:vertical; box-sizing:border-box; margin-top:6px; }
+.repo-summary-actions { display:flex; align-items:center; gap:10px; margin-top:12px; }
