@@ -1,6 +1,7 @@
 (() => {
   const $ = id => document.getElementById(id);
   let rows = [], selected = null, sort = 'date', ascending = false, generation = 0;
+  const expandedCommits = new Set();
   let page = 1, pageCount = 0, loading = false, historyState = 'Not loaded';
   const status = message => { $('repoStatus').textContent = message; };
   async function api(path, options) {
@@ -63,7 +64,16 @@
       button.closest('th').setAttribute('aria-sort', active ? (ascending ? 'ascending' : 'descending') : 'none');
     });
     filtered.sort((a,b)=>String(a[sort]).localeCompare(String(b[sort]))*(ascending?1:-1));
-    pageCount = Math.ceil(filtered.length / Number($('repoPageSize').value));
+    let displayed = filtered;
+    if ($('repoView').value === 'commits') {
+      const groups = new Map();
+      for (const row of filtered) {
+        if (!groups.has(row.commit)) groups.set(row.commit, {...row, files: []});
+        groups.get(row.commit).files.push(row);
+      }
+      displayed = [...groups.values()];
+    }
+    pageCount = Math.ceil(displayed.length / Number($('repoPageSize').value));
     page = Math.max(1, Math.min(page, pageCount || 1));
     $('repoPageTotal').textContent = `of ${pageCount}${loading ? ' so far' : ''}`;
     if (document.activeElement !== $('repoPage')) $('repoPage').value = page;
@@ -71,18 +81,25 @@
     $('repoNext').disabled = $('repoLast').disabled = page >= pageCount;
     $('repoRows').replaceChildren();
     const size = Number($('repoPageSize').value);
-    for (const r of filtered.slice((page - 1) * size, page * size)) {
+    for (const r of displayed.slice((page - 1) * size, page * size)) {
       const tr=document.createElement('tr');
       for (const value of [r.date.replace('T',' ').slice(0,19),r.author,r.path,r.change,r.message]) {
         const td=document.createElement('td');
-        if(value===r.path) { const button=document.createElement('button'); button.type='button'; button.className='repo-file-button'; button.textContent=value; button.onclick=()=>{selected=r.path;page=1;render();}; td.append(button); }
+        if (r.files && value === r.change) { td.textContent = '—'; tr.append(td); continue; }
+        if(value===r.path && r.files) {
+          const details=document.createElement('details'); details.open=expandedCommits.has(r.commit);
+          details.addEventListener('toggle',()=>{ if(details.open) expandedCommits.add(r.commit); else expandedCommits.delete(r.commit); });
+          const summary=document.createElement('summary'); summary.textContent=`${r.files.length} matching file changes`; details.append(summary);
+          for(const file of r.files) { const item=document.createElement('div'); const link=document.createElement('button'); link.type='button'; link.className='repo-file-button'; link.textContent=file.path; link.onclick=()=>{selected=file.path; $('repoView').value='files'; page=1; render();}; item.append(link); details.append(item); }
+          td.append(details);
+        } else if(value===r.path) { const button=document.createElement('button'); button.type='button'; button.className='repo-file-button'; button.textContent=value; button.onclick=()=>{selected=r.path;page=1;render();}; td.append(button); }
         else td.textContent=value;
         tr.append(td);
       }
       $('repoRows').append(tr);
     }
     $('repoAll').hidden=!selected;
-    $('repoCount').textContent = `${filtered.length} file changes${loading ? ' loaded so far' : ''}${selected ? ' for ' + selected : ''}`;
+    $('repoCount').textContent = `${displayed.length} ${$('repoView').value === 'commits' ? 'commits' : 'file changes'}${loading ? ' loaded so far' : ''}${selected ? ' for ' + selected : ''}`;
   }
   function hasFilters() {
     return ['repoAuthor','repoFile','repoFrom','repoTo'].some(id => $(id).value.trim()) || $('repoVsts').checked;
@@ -116,6 +133,7 @@
   for (const id of ['repoAuthor','repoFile','repoFrom','repoTo','repoVsts']) $(id).addEventListener('input',()=>{page=1;render();});
   $('repoClear').onclick=()=>{page=1;for(const id of ['repoAuthor','repoFile','repoFrom','repoTo']) $(id).value=''; $('repoVsts').checked=false; render();};
   $('repoAll').onclick=()=>{selected=null;page=1;render();};
+  $('repoView').onchange=()=>{page=1;render();};
   $('repoPageSize').onchange=()=>{page=1;render();};
   function go(n) { page = n; $('repoPageMessage').textContent=''; render(); $('repoPage').value=page; }
   $('repoFirst').onclick=()=>go(1); $('repoPrev').onclick=()=>go(page-1);
