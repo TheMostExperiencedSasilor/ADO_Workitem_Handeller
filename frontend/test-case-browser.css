@@ -55,3 +55,48 @@
   .tc-search label:not(.tc-query) { flex: 1 1 130px; }
   .tc-search select { width: 100%; min-width: 0; }
 }
+
+.tc-loading { height: 5px; overflow: hidden; border-radius: 4px; background: #e5effd; margin: 12px 0; }
+.tc-loading span { display: block; height: 100%; width: 35%; border-radius: inherit; background: linear-gradient(90deg, #75b8ff, #1768d1, #75b8ff); animation: tc-flow 1.25s ease-in-out infinite; }
+@keyframes tc-flow { from { transform: translateX(-110%); } to { transform: translateX(390%); } }
+.tc-history-table-wrap { max-height: 65vh; }
+.tc-history-table-wrap th { position: sticky; top: 0; z-index: 1; }
+.tc-history-footer { padding-top: 8px; }
+.tc-history-filters { display: flex; align-items: end; flex-wrap: wrap; gap: 10px; margin: 12px 0; }
+.tc-history-filters label { display: flex; flex-direction: column; gap: 6px; flex: 1 1 150px; margin: 0; min-width: 0; font-size: 13px; }
+.tc-history-filters input, .tc-history-filters select, .tc-history-filters button { height: 38px; margin: 0; }
+.tc-history-pagination { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 12px 0; font-size: 13px; }
+.tc-history-pagination label { display: flex; align-items: center; gap: 6px; margin: 0; white-space: nowrap; font-size: inherit; }
+.tc-history-pagination button, .tc-history-pagination select, .tc-history-pagination input { height: 36px; min-height: 36px; margin: 0; box-sizing: border-box; }
+.tc-history-pagination input { width: 72px; padding: 6px; }
+.tc-history-pagination select { width: 80px; padding: 6px; }
+#tcHistoryCount { flex: 1 1 180px; color: var(--muted); }
+#tcHistoryStatus { font-size: 13px; line-height: 1.5; margin: 8px 0; }
+.tc-history-empty { text-align: center; color: var(--muted); }
+@media (prefers-reduced-motion: reduce) { .tc-loading span { animation: none; width: 100%; opacity: .65; } }
+
+.tc-date-trigger, .tc-date-trigger:hover { display: inline-flex; align-items: center; gap: 7px; margin: 0; padding: 0; background: transparent; color: inherit; font: inherit; font-weight: 600; }
+.tc-date-trigger.active { color: var(--accent); }
+.tc-date-trigger:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+.tc-calendar { position: fixed; z-index: 100; width: 310px; max-width: calc(100vw - 24px); max-height: calc(100vh - 24px); overflow: auto; padding: 14px; border: 1px solid var(--border); border-radius: 9px; background: white; box-shadow: 0 8px 30px #17203330; font-size: 13px; }
+.tc-calendar-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+.tc-calendar button { margin: 0; }
+.tc-calendar-heading button, .tc-calendar-nav button { width: 30px; height: 30px; padding: 0; background: transparent; color: var(--text); font-size: 21px; }
+.tc-calendar-heading button:hover, .tc-calendar-nav button:hover { background: #edf4ff; }
+.tc-calendar-nav { display: grid; grid-template-columns: 30px minmax(0, 1fr) 78px 30px; align-items: center; gap: 5px; margin-bottom: 10px; }
+.tc-calendar-nav select { height: 32px; padding: 4px 6px; min-width: 0; font-size: 13px; }
+.tc-calendar-week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.tc-calendar-week > [role="columnheader"] { text-align: center; padding: 5px 0; font-size: 12px; color: var(--muted); font-weight: 600; }
+.tc-calendar-cell { min-width: 0; }
+.tc-calendar-day { width: 100%; height: 33px; padding: 0; border-radius: 0; color: var(--text); background: transparent; font-size: 13px; }
+.tc-calendar-day.outside { color: #8c98ab; }
+.tc-calendar-day.today { font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
+.tc-calendar-day.in-range { background: #e8f1ff; }
+.tc-calendar-day.endpoint { color: white; background: var(--accent); border-radius: 5px; font-weight: 700; }
+.tc-calendar-day:hover { color: var(--accent-dark); background: #d5e7ff; border-radius: 5px; }
+.tc-calendar-day:focus-visible { outline: 2px solid var(--accent-dark); outline-offset: -2px; border-radius: 5px; }
+.tc-calendar-range { margin: 12px 0 5px; font-weight: 600; line-height: 1.5; }
+.tc-calendar-hint { color: var(--muted); font-size: 12px; line-height: 1.4; margin: 0 0 10px; }
+.tc-calendar-actions { display: flex; justify-content: space-between; gap: 12px; }
+.tc-calendar-actions button { padding: 7px 11px; font-size: 13px; }
+#tcCalendarClear { color: var(--accent); background: #edf4ff; }
