@@ -216,13 +216,11 @@
           <button id="tcSearchButton" type="submit">Search</button>
         </form>
         <p id="tcSearchHelp" class="tc-hint">Exact ID finds one test case. Flexible ID matches the starting digits; spaces are ignored.</p>
-        <div id="tcSearchProgress" class="tc-loading" role="progressbar" aria-label="Searching test cases" hidden><span></span></div>
         <p id="tcSearchStatus" role="status" aria-live="polite">Search by ID or title to get started.</p>
         <div id="tcResults" hidden>
           <div class="tc-table-wrap"><table class="tc-table"><caption class="tc-sr-only">Search results — select one test case</caption><thead><tr><th>Select</th><th>ID</th><th>Title</th><th>State</th><th>Assigned to</th></tr></thead><tbody id="tcResultRows"></tbody></table></div>
           <nav class="tc-pagination" aria-label="Test case search pages"><button id="tcPrev" type="button">Previous</button><span id="tcPageInfo"></span><button id="tcNext" type="button">Next</button></nav>
         </div>
-        <div id="tcDetailProgress" class="tc-loading" role="progressbar" aria-label="Loading test case" hidden><span></span></div>
         <p id="tcDetailStatus" role="status" aria-live="polite"></p>
         <article id="tcSelected" hidden>
           <div class="tc-selected-heading"><div><span class="tc-eyebrow" id="tcSelectedId"></span><h3 id="tcSelectedTitle"></h3><p id="tcSelectedMeta"></p></div><a id="tcAdoLink" target="_blank" rel="noopener noreferrer">Open in ADO ↗</a></div>
@@ -234,41 +232,10 @@
           <div id="tcDetails" class="tc-content" role="tabpanel" aria-labelledby="tcDetailsTab"></div>
           <div id="tcAutomation" class="tc-content" role="tabpanel" aria-labelledby="tcAutomationTab" hidden></div>
           <div id="tcHistory" class="tc-content" role="tabpanel" aria-labelledby="tcHistoryTab" hidden>
-            <div class="tc-history-heading"><div><h4>Execution history</h4><p class="tc-hint">Newest first · local dates and times. Older results load automatically; filters apply as they arrive.</p></div></div>
-            <div class="tc-table-wrap tc-history-table-wrap"><table class="tc-table"><caption class="tc-sr-only">Test case execution history</caption><thead><tr><th>Test Suite</th><th>Test Plan</th><th>Result</th><th><button id="tcHistoryDateTrigger" class="tc-date-trigger" type="button" aria-haspopup="dialog" aria-controls="tcHistoryCalendar" aria-expanded="false" aria-label="Filter logged date and time by date range">Logged Date and time <span aria-hidden="true">▾</span></button></th><th>Tester</th></tr></thead><tbody id="tcHistoryRows"></tbody></table></div>
-            <div id="tcHistoryCalendar" class="tc-calendar" role="dialog" aria-labelledby="tcCalendarTitle" hidden>
-              <div class="tc-calendar-heading"><strong id="tcCalendarTitle">Logged date range</strong><button id="tcCalendarClose" type="button" aria-label="Close date calendar">×</button></div>
-              <div class="tc-calendar-nav"><button id="tcCalendarPrev" type="button" aria-label="Previous month">‹</button><select id="tcCalendarMonth" aria-label="Calendar month"></select><select id="tcCalendarYear" aria-label="Calendar year"></select><button id="tcCalendarNext" type="button" aria-label="Next month">›</button></div>
-              <div id="tcCalendarDays" class="tc-calendar-days" role="grid" aria-label="Calendar dates"></div>
-              <p id="tcCalendarRange" class="tc-calendar-range" aria-live="polite"></p>
-              <p id="tcCalendarHint" class="tc-calendar-hint" aria-live="polite">Choose a start date.</p>
-              <div class="tc-calendar-actions"><button id="tcCalendarClear" type="button">Clear dates</button><button id="tcCalendarDone" type="button">Done</button></div>
-            </div>
-            <div id="tcHistoryFooter" class="tc-history-footer">
-              <div class="tc-history-filters" role="group" aria-label="Filter execution history">
-                <label>Test Suite<input id="tcHistorySuite" type="search" placeholder="Filter suite name or ID"></label>
-                <label>Test Plan<input id="tcHistoryPlan" type="search" placeholder="Filter plan name or ID"></label>
-                <label>Result<select id="tcHistoryOutcome"><option value="">All results</option><option>Failed</option><option>Passed</option><option>Blocked</option><option>Not Executed</option><option>Inconclusive</option><option>Aborted</option><option>Other</option></select></label>
-                <label>Tester<input id="tcHistoryTester" type="search" placeholder="Filter tester"></label>
-                <label>From date<input id="tcHistoryFrom" type="date"></label>
-                <label>To date<input id="tcHistoryTo" type="date"></label>
-                <button id="tcHistoryClear" type="button">Clear filters</button>
-              </div>
-              <nav class="tc-history-pagination" aria-label="Execution history pages">
-                <label>Rows per page<select id="tcHistoryPageSize"><option>10</option><option selected>20</option><option>30</option></select></label>
-                <button id="tcHistoryFirst" type="button" aria-label="First history page">«</button>
-                <button id="tcHistoryPrev" type="button" aria-label="Previous history page">‹</button>
-                <label>Page<input id="tcHistoryPage" type="number" min="1" value="1" aria-label="History page number"></label><span id="tcHistoryPageTotal">of 0</span>
-                <button id="tcHistoryGo" type="button">Go</button>
-                <button id="tcHistoryNext" type="button" aria-label="Next history page">›</button>
-                <button id="tcHistoryLast" type="button" aria-label="Last loaded history page">»</button>
-                <span id="tcHistoryCount" role="status" aria-live="polite"></span>
-                <button id="tcHistoryRefresh" type="button">Refresh history</button>
-                <button id="tcHistoryMore" type="button" hidden>Retry loading</button>
-              </nav>
-              <div id="tcHistoryProgress" class="tc-loading" role="progressbar" aria-label="Loading execution history" hidden><span></span></div>
-              <p id="tcHistoryStatus" role="status" aria-live="polite">Open History to load execution results.</p>
-            </div>
+            <div class="tc-history-heading"><div><h4>Execution history</h4><p class="tc-hint">Newest first · logged time uses completion, last update, or creation time. Dates are shown in your local time.</p></div><button id="tcHistoryRefresh" type="button">Refresh history</button></div>
+            <p id="tcHistoryStatus" role="status" aria-live="polite">Open History to load execution results.</p>
+            <div class="tc-table-wrap"><table class="tc-table"><caption class="tc-sr-only">Test case execution history</caption><thead><tr><th>Test Suite</th><th>Test Plan</th><th>Result</th><th>Logged Date and time</th><th>Tester</th></tr></thead><tbody id="tcHistoryRows"></tbody></table></div>
+            <button id="tcHistoryMore" type="button" hidden>Load more</button>
           </div>
         </article>
       </div>

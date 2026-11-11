@@ -1,6 +1,6 @@
 """Read-only Test Case search and execution history against Azure DevOps."""
 import re
-from urllib.parse import unquote, urlparse
+from urllib.parse import unquote
 from xml.etree import ElementTree
 
 import requests
@@ -63,98 +63,6 @@ class TestCaseBrowser:
         if response.status_code != 200:
             raise ValueError("Unexpected Azure DevOps response.")
         return response.json()
-
-    def _get(self, path):
-        response = requests.get(f"{self.client.base_url}/_apis/{path}", headers=self.client.headers,
-                                params={"api-version": self.client.config.ado_api_version},
-                                timeout=30, allow_redirects=False)
-        response.raise_for_status()
-        data = response.json()
-        if response.status_code != 200 or not isinstance(data, dict):
-            raise ValueError("Invalid Azure DevOps metadata response.")
-        return data
-
-    def _case_point_contexts(self, case_id):
-        """Match executions to exact points; never guess from case membership."""
-        contexts, skip = [], 0
-        while True:
-            data = self._post("test/points", {"pointsFilter": {"testcaseIds": [case_id]}},
-                              {"$skip": skip, "$top": 1000})
-            points = data.get("points")
-            if not isinstance(points, list):
-                raise ValueError("Invalid Azure DevOps point response.")
-            for point in points:
-                if str((point.get("testCase") or {}).get("id")) != str(case_id):
-                    continue
-                plan, suite = dict(point.get("testPlan") or {}), dict(point.get("suite") or {})
-                # Some ADO versions only put the plan/suite IDs in the point URL.
-                # Extract IDs only; never send a PAT to a URL supplied by ADO.
-                match = re.search(r"/_apis/test/Plans/([0-9]+)/Suites/([0-9]+)/Points/([0-9]+)/?$",
-                                  urlparse(point.get("url") or "").path, re.IGNORECASE)
-                if match and str(point.get("id")) == match[3]:
-                    plan.setdefault("id", match[1])
-                    suite.setdefault("id", match[2])
-                contexts.append((str(point.get("id")), plan, suite))
-            if len(points) < 1000:
-                return contexts
-            skip += len(points)
-
-    def _history_references(self, case_id, results):
-        """Enrich recorded IDs and point links, with request-local lookup caches."""
-        contexts, plans, suites, warnings = None, {}, {}, set()
-        references = []
-        for result in results:
-            plan, suite = dict(result.get("testPlan") or {}), dict(result.get("testSuite") or {})
-            point_id = reference_id(result.get("testPoint"))
-            # A full result can contain point/suite references omitted by the query.
-            if reference_id(plan) and not reference_id(suite) and not suite.get("name") and not point_id:
-                run_id, result_id = reference_id(result.get("testRun")), reference_id({"id": result.get("id")})
-                if run_id and result_id:
-                    try:
-                        detail = self._get(f"test/Runs/{run_id}/results/{result_id}")
-                        if str((detail.get("testCase") or {}).get("id")) == str(case_id):
-                            suite = dict(detail.get("testSuite") or suite)
-                            point_id = reference_id(detail.get("testPoint"))
-                    except (requests.RequestException, ValueError, TypeError):
-                        warnings.add("Some execution context could not be resolved from ADO.")
-            if point_id and (not reference_id(plan) or (not reference_id(suite) and not suite.get("name"))):
-                if contexts is None:
-                    try:
-                        contexts = self._case_point_contexts(case_id)
-                    except (requests.RequestException, ValueError, TypeError):
-                        contexts = []
-                        warnings.add("Some execution context could not be resolved from ADO.")
-                matches = [(p, s) for identifier, p, s in contexts if identifier == str(point_id)
-                           and (not reference_id(plan) or reference_id(plan) == reference_id(p))
-                           and (not reference_id(suite) or reference_id(suite) == reference_id(s))]
-                if len(matches) == 1:
-                    matched_plan, matched_suite = matches[0]
-                    plan = {**matched_plan, **{key: value for key, value in plan.items() if value}}
-                    suite = {**matched_suite, **{key: value for key, value in suite.items() if value}}
-            plan_id, suite_id = reference_id(plan), reference_id(suite)
-            if plan_id and not plan.get("name"):
-                if plan_id not in plans:
-                    try:
-                        plans[plan_id] = self._get(f"testplan/plans/{plan_id}").get("name")
-                    except (requests.RequestException, ValueError, TypeError):
-                        plans[plan_id] = None
-                if plans[plan_id]:
-                    plan["name"] = plans[plan_id]
-            if plan_id and suite_id and not suite.get("name"):
-                key = (plan_id, suite_id)
-                if key not in suites:
-                    try:
-                        suites[key] = self._get(f"testplan/Plans/{plan_id}/suites/{suite_id}").get("name")
-                    except (requests.RequestException, ValueError, TypeError):
-                        suites[key] = None
-                if suites[key]:
-                    suite["name"] = suites[key]
-            for reference in (plan, suite):
-                if reference_id(reference) and not reference.get("name"):
-                    reference["name"] = "Name unavailable"
-                    warnings.add("Some plan or suite names are unavailable or access is denied.")
-            references.append((reference_label(plan), reference_label(suite)))
-        return references, sorted(warnings)
 
     def search(self, field, mode, query):
         conditions = ["[System.TeamProject] = @project", "[System.WorkItemType] = 'Test Case'"]
@@ -241,20 +149,17 @@ class TestCaseBrowser:
         values = data if isinstance(data, list) else data.get("value")
         if not isinstance(values, list):
             raise ValueError("Invalid Azure DevOps history response.")
-        page = values[:page_size]
-        for result in page:
+        rows = []
+        for result in values[:page_size]:
             if str((result.get("testCase") or {}).get("id")) != str(case_id):
                 raise ValueError("Unexpected test case in execution history.")
-        references, warnings = self._history_references(case_id, page)
-        rows = []
-        for result, (plan, suite) in zip(page, references):
             rows.append({"resultId": result.get("id"), "runId": (result.get("testRun") or {}).get("id"),
-                         "testSuite": suite, "testPlan": plan,
+                         "testSuite": reference_label(result.get("testSuite")),
+                         "testPlan": reference_label(result.get("testPlan")),
                          "result": result.get("outcome") or "Unspecified",
                          "loggedDate": result.get("completedDate") or result.get("lastUpdatedDate") or result.get("createdDate") or "",
                          "tester": display_value(result.get("runBy"))})
-        return {"history": rows, "nextSkip": skip + page_size if len(values) > page_size else None,
-                "warnings": warnings}
+        return {"history": rows, "nextSkip": skip + page_size if len(values) > page_size else None}
 
 
 def display_value(value):
@@ -267,13 +172,6 @@ def reference_label(value):
     value = value or {}
     name, identifier = value.get("name"), value.get("id")
     return f"{name} ({identifier})" if name and identifier else str(name or identifier or "Not recorded")
-
-
-def reference_id(value):
-    try:
-        return positive_id((value or {}).get("id"))
-    except (ValueError, AttributeError):
-        return None
 
 
 def parse_steps(xml):
