@@ -121,6 +121,14 @@ def _owns_backend(health: dict, url: str) -> bool:
         return False
 
 
+def _serving_pid(health: dict | None, revision: str, instance_id: str) -> int | None:
+    """A Windows venv redirector can have a different PID from its interpreter."""
+    if not health or health.get("backendRevision") != revision or health.get("instanceId") != instance_id:
+        return None
+    pid = health.get("pid")
+    return pid if isinstance(pid, int) and not isinstance(pid, bool) and pid > 0 else None
+
+
 def _read_runtime() -> tuple[int | None, str]:
     url = configured_url()
     if not PID_FILE.exists():
@@ -163,7 +171,7 @@ def serve() -> int:
     server = make_server(host, config.flask_port, create_app(), threaded=True)
     url = f"http://{browser_host}:{server.server_port}"
     _write_runtime(os.getpid(), url, os.getenv("ADO_BACKEND_INSTANCE_ID", ""))
-    print(f"Backend ready: {url}", flush=True)
+    print(f"Backend ready: {url} (server PID {os.getpid()})", flush=True)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
@@ -229,13 +237,26 @@ def launch_background() -> int:
     _log_launcher(f"Started background backend PID {process.pid}; waiting for {url}.")
 
     deadline = time.monotonic() + START_TIMEOUT_SECONDS
+    last_identity = None
     while time.monotonic() < deadline:
         health = read_health(url)
-        if (health and health.get("backendRevision") == revision
-                and health.get("instanceId") == instance_id and health.get("pid") == process.pid):
-            _log_launcher(f"App ready at {url}; opening browser.")
+        serving_pid = _serving_pid(health, revision, instance_id)
+        if serving_pid is not None:
+            # Track the server itself, not the Windows python[w].exe redirector.
+            # The fresh per-launch marker proves it belongs to this startup.
+            _write_runtime(serving_pid, url, instance_id)
+            _log_launcher(f"App ready at {url}; server PID {serving_pid}, launcher child PID {process.pid}; opening browser.")
             webbrowser.open(url)
             return 0
+        if health:
+            identity = (health.get("pid"), health.get("backendRevision"), health.get("instanceId"))
+            if identity != last_identity:
+                _log_launcher(
+                    f"Waiting for matching backend: server PID {health.get('pid')}, launcher child PID {process.pid}; "
+                    f"revision matches={health.get('backendRevision') == revision}, "
+                    f"instance matches={health.get('instanceId') == instance_id}."
+                )
+                last_identity = identity
         if process.poll() is not None:
             _clear_runtime_for_pid(process.pid)
             raise RuntimeError(
@@ -248,8 +269,11 @@ def launch_background() -> int:
     except OSError:
         pass
     _clear_runtime_for_pid(process.pid)
+    reason = ""
+    if last_identity is not None:
+        reason = " A server answered health checks, but its revision or launch identity did not match; see launcher.log."
     raise RuntimeError(
-        f"The backend did not become ready within {START_TIMEOUT_SECONDS} seconds. Review {BACKEND_LOG}."
+        f"The backend did not become ready within {START_TIMEOUT_SECONDS} seconds.{reason} Review {BACKEND_LOG}."
     )
 
 

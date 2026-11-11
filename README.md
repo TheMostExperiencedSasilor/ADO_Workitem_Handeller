@@ -183,3 +183,9 @@ For the first upgrade from that older launcher, stop the detached backend from t
 Then double-click `launcher/ADOWorkItemLauncher.exe` and reconnect to ADO on Setup. On macOS/Linux, use `backend/.venv/bin/python start_app.py --stop`, then launch normally.
 
 Subsequent launches compare the running backend's startup source fingerprint with the local Python source. A changed, launcher-owned instance is restarted automatically. A legacy instance or one whose PID/instance marker does not match is left running and the launcher logs manual restart instructions. Application responses are not cached, and Test Case request method errors explain the required restart.
+
+### Healthy backend followed by a launcher timeout on Windows
+
+If `backend.log` says `Backend ready` and shows successful health checks, but the launcher times out, the server may be running as a child of the Windows virtual-environment Python redirector. Those processes have different PIDs. Startup therefore matches the source revision and fresh launch marker, then records the actual serving PID reported by health. It does not require that PID to equal the redirector PID. Stop/restart uses the recorded serving PID.
+
+The launcher logs both PIDs and logs revision/launch-marker match results when a healthy server is rejected, so a startup identity failure can be distinguished from a backend that never started.
