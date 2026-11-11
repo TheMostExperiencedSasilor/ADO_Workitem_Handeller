@@ -46,7 +46,7 @@ one click -> ensure Python environment -> start/reuse detached backend
           -> wait for /api/health -> open localhost -> launcher exits
 ```
 
-The backend keeps running after the launcher exits. If it is already running, using the launcher again simply opens the existing localhost app instead of starting a duplicate process.
+The backend keeps running after the launcher exits. If it is already running with the current Python source, using the launcher again opens the existing localhost app. If its source has changed, the launcher restarts the exact app instance it previously recorded before opening the browser. The restart clears the session-only ADO PAT, so reconnect on Setup.
 
 ### Windows
 
@@ -169,3 +169,17 @@ Select one radio button to load a case. Details shows description, preconditions
 Search/details need Work Items read access. History also needs Test Management access; the documented preview query endpoint lists the `vso.test_write` scope. A denied or unavailable history endpoint displays an error with retry; it is not presented as an empty history. No ADO work items or results are changed.
 
 Focused checks: `python -m pytest -q tests/test_test_case_browser.py` and `node --test tests/test_test_case_browser_frontend.cjs`. API tests use mocked ADO responses; validate the preview history endpoint with a connected organization before relying on its production history.
+
+### Recovering from a Test Case search 405 after an update
+
+An older backend can keep running after a Git update while serving the new frontend files from disk. Its old route table does not include the Test Case search API. This causes `405 Method Not Allowed` (wrapped as a 500 by older backend versions). A browser refresh does not reload Python code.
+
+For the first upgrade from that older launcher, stop the detached backend from the app folder:
+
+```powershell
+.\backend\.venv\Scripts\python.exe .\start_app.py --stop
+```
+
+Then double-click `launcher/ADOWorkItemLauncher.exe` and reconnect to ADO on Setup. On macOS/Linux, use `backend/.venv/bin/python start_app.py --stop`, then launch normally.
+
+Subsequent launches compare the running backend's startup source fingerprint with the local Python source. A changed, launcher-owned instance is restarted automatically. A legacy instance or one whose PID/instance marker does not match is left running and the launcher logs manual restart instructions. Application responses are not cached, and Test Case request method errors explain the required restart.

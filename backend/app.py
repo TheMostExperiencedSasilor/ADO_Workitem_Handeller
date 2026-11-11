@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 from flask import Flask, jsonify, send_from_directory
@@ -11,6 +12,8 @@ from routes.test_plan_routes import test_plans_bp
 from routes.test_assignment_workbook_routes import assignment_workbook_bp
 from routes.logged_ado_results_routes import logged_ado_results_bp
 from routes.repo_history_routes import repo_history_bp
+from services.backend_revision import backend_revision
+from werkzeug.exceptions import HTTPException
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
 FRONTEND_DIR = ROOT_DIR / "frontend"
@@ -18,6 +21,10 @@ FRONTEND_DIR = ROOT_DIR / "frontend"
 
 def create_app() -> Flask:
     app = Flask(__name__, static_folder=None)
+    # Capture once: hashing on each health request would incorrectly claim that
+    # an old Python process had loaded code subsequently pulled onto disk.
+    loaded_revision = backend_revision(ROOT_DIR)
+    instance_id = os.getenv("ADO_BACKEND_INSTANCE_ID", "")
     CORS(app, resources={r"/api/*": {"origins": "*"}})
 
     app.register_blueprint(setup_bp)
@@ -30,7 +37,13 @@ def create_app() -> Flask:
 
     @app.get("/api/health")
     def health():
-        return jsonify({"status": "ok"})
+        return jsonify({"status": "ok", "backendRevision": loaded_revision,
+                        "instanceId": instance_id, "pid": os.getpid()})
+
+    @app.after_request
+    def avoid_stale_application_files(response):
+        response.headers["Cache-Control"] = "no-store"
+        return response
 
     @app.get("/")
     def index():
@@ -50,6 +63,8 @@ def create_app() -> Flask:
 
     @app.errorhandler(Exception)
     def unhandled_error(error: Exception):
+        if isinstance(error, HTTPException):
+            return jsonify({"error": error.description}), error.code
         return jsonify({"error": str(error)}), 500
 
     return app

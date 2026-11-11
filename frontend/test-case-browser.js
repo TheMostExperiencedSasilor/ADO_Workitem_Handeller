@@ -22,7 +22,10 @@
   }
   async function request(url, options = {}) {
     const response = await fetch(url, { ...options, headers: { 'Content-Type': 'application/json' }, cache: 'no-store' });
-    const data = await response.json();
+    const data = await response.json().catch(() => ({}));
+    if (response.status === 405 || (response.status === 500 && /405 Method Not Allowed/i.test(data.error || ''))) {
+      throw new Error('The running backend does not support this Test Case request. Stop and relaunch the app after updating, then reconnect to ADO. Refreshing the browser alone will not load the new backend.');
+    }
     if (!response.ok) throw new Error(data.error || 'Could not load test case data.');
     return data;
   }
