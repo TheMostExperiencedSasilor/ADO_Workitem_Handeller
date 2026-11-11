@@ -19,3 +19,62 @@
 #repoSummaryMessage { display:block; margin-top:6px; }
 
 .repo-sort-indicator { display:inline-block; width:1em; font-size:.75em; vertical-align:middle; }
+
+/* Keep field edges and action buttons aligned within Repo Tracker. */
+.repo-connect label,
+.repo-controls label,
+.repo-filters label {
+  margin: 0;
+  min-width: 0;
+}
+
+.repo-connect input,
+.repo-controls select,
+.repo-filters input:not([type="checkbox"]) {
+  height: 42px;
+}
+
+.repo-connect button,
+.repo-controls button {
+  height: 42px;
+  box-sizing: border-box;
+  white-space: nowrap;
+}
+
+.repo-controls label:has(#repoBranch) {
+  width: min(220px, 100%);
+}
+
+.repo-controls label:has(#repoView) {
+  width: min(160px, 100%);
+}
+
+.repo-filters .repo-check {
+  flex: 0 1 auto;
+  white-space: nowrap;
+}
+
+.repo-filters .repo-check input {
+  width: auto;
+  min-height: 0;
+}
+
+.repo-pagination label {
+  white-space: nowrap;
+}
+
+.repo-pagination select {
+  width: auto;
+  min-width: 80px;
+}
+
+@media (max-width: 600px) {
+  .repo-connect label:first-child,
+  .repo-connect label:nth-child(2) {
+    flex-basis: 100%;
+  }
+
+  .repo-filters label:not(.repo-check) {
+    flex-basis: min(100%, 220px);
+  }
+}
