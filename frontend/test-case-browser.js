@@ -138,6 +138,20 @@
     }
   });
   const normalized = (value) => value.replace(/[^a-z0-9]/gi, '').toLowerCase();
+  function acceptedDateField(field) {
+    const names = ['automatedandaccepteddate', 'automatedaccepteddate'];
+    return names.includes(normalized(field.name)) || names.includes(normalized(field.referenceName.split('.').pop()));
+  }
+  function fieldValue(field) {
+    if (!acceptedDateField(field) || !field.value) return text(field.value);
+    const date = new Date(field.value);
+    if (Number.isNaN(date.getTime())) return text(field.value);
+    const parts = Object.fromEntries(new Intl.DateTimeFormat('en-US', {
+      month: 'short', day: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
+      hour12: true, timeZoneName: 'short',
+    }).formatToParts(date).map((part) => [part.type, part.value]));
+    return `${parts.month}/${parts.day}/${parts.year} ${parts.hour}:${parts.minute} ${parts.dayPeriod} ${parts.timeZoneName}`;
+  }
   function renderCase(data) {
     const fields = data.fields;
     const find = (...names) => fields.find((field) => names.some((name) => normalized(field.name) === normalized(name)
@@ -169,10 +183,16 @@
     function fieldList(entries) {
       const list = node('dl', null, 'tc-field-list');
       entries.forEach((entry) => { const term = node('dt', entry.name); term.title = entry.referenceName;
-        const detail = node('dd'); detail.appendChild(rich(text(entry.value))); list.append(term, detail); });
+        const detail = node('dd'); detail.appendChild(rich(fieldValue(entry)));
+        if (acceptedDateField(entry)) detail.title = text(entry.value);
+        list.append(term, detail); });
       return list;
     }
-    const automation = fields.filter((field) => /automat|testtool|scriptname|scriptlocation/i.test(field.name + field.referenceName));
+    const hiddenAutomation = fields.filter((field) => field.referenceName === 'Microsoft.VSTS.TCM.AutomationStatus'
+      || normalized(field.name) === 'automationstatus');
+    hiddenAutomation.forEach((field) => consumed.add(field.referenceName));
+    const automation = fields.filter((field) => !consumed.has(field.referenceName)
+      && /automat|testtool|scriptname|scriptlocation/i.test(field.name + field.referenceName));
     automation.forEach((field) => consumed.add(field.referenceName));
     section($('tcAutomation'), 'Associated Automation', fieldList(automation));
     if (!automation.length) $('tcAutomation').appendChild(node('p', 'No automation details recorded.'));

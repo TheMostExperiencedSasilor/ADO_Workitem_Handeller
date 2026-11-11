@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 
-function loadBrowser() {
+function loadBrowser({ timeZone } = {}) {
   class Element {
     constructor(tag = 'div', content) {
       this.tagName = tag.toUpperCase(); this.nodeType = tag === '#text' ? 3 : 1;
@@ -33,6 +33,7 @@ function loadBrowser() {
   const calls = [];
   const context = vm.createContext({
     URL, console,
+    Intl: timeZone ? { DateTimeFormat: function(locale, options) { return new Intl.DateTimeFormat(locale, { ...options, timeZone }); } } : Intl,
     document: { getElementById: $, querySelectorAll: () => tabs,
       createElement: (tag) => new Element(tag), createTextNode: (value) => new Element('#text', value) },
     DOMParser: class { parseFromString(value) { return { body: { childNodes: [new Element('#text', value)] } }; } },
@@ -266,4 +267,47 @@ test('invalid date range and non-advancing ADO pages report errors without claim
   $('tcHistoryFrom').value = '2026-11-10'; $('tcHistoryTo').value = '2026-11-01';
   $('tcHistoryFrom').listeners.input();
   assert.match($('tcHistoryStatus').textContent, /From date must be on or before/);
+});
+
+test('Automation hides generic status, keeps State of Automation, and formats accepted date in local time', async () => {
+  for (const [timeZone, expected] of [
+    ['UTC', 'May/06/2025 02:27 AM UTC'],
+    ['Asia/Shanghai', 'May/06/2025 10:27 AM GMT+8'],
+    ['America/New_York', 'May/05/2025 10:27 PM EDT'],
+  ]) {
+    const { $, context, submit, json, details, findAll } = loadBrowser({ timeZone });
+    const data = details(1);
+    data.fields.push(
+      { name: 'Automation status', referenceName: 'Microsoft.VSTS.TCM.AutomationStatus', value: 'Not Automated' },
+      { name: 'State of Automation', referenceName: 'Custom.StateOfAutomation', value: 'Automated and Accepted' },
+      { name: 'Automated and Accepted Date', referenceName: 'Custom.AcceptedDate', value: '2025-05-06T02:27:26.623Z' },
+      { name: 'Automation Test Tool', referenceName: 'Custom.TestTool', value: 'UFT Developer' },
+      { name: 'Automation Script Name', referenceName: 'Custom.ScriptName', value: 'VSTS24092' },
+    );
+    context.respond = async (url) => json(url.endsWith('/search') ? results(1) : data);
+    await submit(); await $('tcResultRows').children[0].children[0].children[0].listeners.change();
+    const labels = findAll($('tcAutomation'), (element) => element.tagName === 'DT').map((element) => element.textContent);
+    assert.ok(!labels.includes('Automation status'));
+    assert.ok(labels.includes('State of Automation'));
+    assert.match($('tcAutomation').textContent, /Automated and Accepted/);
+    assert.match($('tcAutomation').textContent, /UFT Developer/);
+    assert.match($('tcAutomation').textContent, /VSTS24092/);
+    assert.ok($('tcAutomation').textContent.includes(expected), $('tcAutomation').textContent);
+    assert.ok(!$('tcDetails').textContent.includes('Not Automated')); // Hidden row does not move into Planning.
+    const accepted = findAll($('tcAutomation'), (element) => element.tagName === 'DD' && element.title === '2025-05-06T02:27:26.623Z');
+    assert.equal(accepted.length, 1); // Preserve exact source value in the tooltip.
+  }
+});
+
+test('invalid accepted dates and notes remain intact', async () => {
+  const { $, context, submit, json, details } = loadBrowser({ timeZone: 'UTC' });
+  const data = details(1);
+  data.fields.push(
+    { name: 'Automated and Accepted Date', referenceName: 'Custom.AcceptedDate', value: 'Date not provided' },
+    { name: 'Notes', referenceName: 'Custom.Notes', value: 'Accepted in HYSYS V15 AES Media 620.' },
+  );
+  context.respond = async (url) => json(url.endsWith('/search') ? results(1) : data);
+  await submit(); await $('tcResultRows').children[0].children[0].children[0].listeners.change();
+  assert.match($('tcAutomation').textContent, /Date not provided/);
+  assert.match($('tcAutomation').textContent, /Accepted in HYSYS V15 AES Media 620/);
 });
