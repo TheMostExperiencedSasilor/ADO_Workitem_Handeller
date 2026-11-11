@@ -10,6 +10,7 @@
   <link rel="stylesheet" href="repo-history.css">
   <link rel="stylesheet" href="test-assignment-workbook.css">
   <link rel="stylesheet" href="test-result-charts.css">
+  <link rel="stylesheet" href="test-case-browser.css">
 </head>
 <body>
   <header class="app-header">
@@ -144,7 +145,7 @@
     <section class="panel work-type-panel">
       <div class="panel-heading-row">
         <h2>Work item pages</h2>
-        <span class="mini-status">Page shells</span>
+        <span class="mini-status">Work items</span>
       </div>
       <div class="work-tabs" role="tablist" aria-label="Work item type pages">
         <button class="work-tab active" type="button" role="tab" aria-selected="true" data-work-tab="feature"><span class="type-icon feature">F</span>Feature</button>
@@ -205,14 +206,38 @@
 
       <div class="work-page" data-work-page="test-case" role="tabpanel" hidden>
         <div class="work-page-heading">
-          <div><h3>Test Case</h3><p>Page shell for structured test design and validation coverage.</p></div>
-          <span class="type-pill muted-pill">Page shell</span>
+          <div><h3>Test Case</h3><p>Find a test case and review its details, automation, and execution history.</p></div>
+          <span class="type-pill">ADO Test Cases</span>
         </div>
-        <div class="page-block-grid">
-          <div class="page-block"><strong>Preconditions block</strong><span>Setup, data, environment, version.</span></div>
-          <div class="page-block"><strong>Steps block</strong><span>Actions, expected results, pass criteria.</span></div>
-          <div class="page-block"><strong>Coverage block</strong><span>Linked bug/story/feature and risk area.</span></div>
+        <form id="tcSearch" class="tc-search">
+          <label>Search by<select id="tcField"><option value="id">ID</option><option value="title">Title</option></select></label>
+          <label class="tc-query">Search value<input id="tcQuery" type="search" required maxlength="300" placeholder="Enter a test case ID" autocomplete="off"></label>
+          <label>Match<select id="tcMode"><option value="exact">Exact match</option><option value="flexible">Flexible match</option></select></label>
+          <button id="tcSearchButton" type="submit">Search</button>
+        </form>
+        <p id="tcSearchHelp" class="tc-hint">Exact ID finds one test case. Flexible ID matches the starting digits; spaces are ignored.</p>
+        <p id="tcSearchStatus" role="status" aria-live="polite">Search by ID or title to get started.</p>
+        <div id="tcResults" hidden>
+          <div class="tc-table-wrap"><table class="tc-table"><caption class="tc-sr-only">Search results — select one test case</caption><thead><tr><th>Select</th><th>ID</th><th>Title</th><th>State</th><th>Assigned to</th></tr></thead><tbody id="tcResultRows"></tbody></table></div>
+          <nav class="tc-pagination" aria-label="Test case search pages"><button id="tcPrev" type="button">Previous</button><span id="tcPageInfo"></span><button id="tcNext" type="button">Next</button></nav>
         </div>
+        <p id="tcDetailStatus" role="status" aria-live="polite"></p>
+        <article id="tcSelected" hidden>
+          <div class="tc-selected-heading"><div><span class="tc-eyebrow" id="tcSelectedId"></span><h3 id="tcSelectedTitle"></h3><p id="tcSelectedMeta"></p></div><a id="tcAdoLink" target="_blank" rel="noopener noreferrer">Open in ADO ↗</a></div>
+          <div class="tc-tabs" role="tablist" aria-label="Selected test case">
+            <button id="tcDetailsTab" type="button" role="tab" aria-controls="tcDetails" aria-selected="true" data-tc-tab="tcDetails">Details</button>
+            <button id="tcAutomationTab" type="button" role="tab" aria-controls="tcAutomation" aria-selected="false" tabindex="-1" data-tc-tab="tcAutomation">Automation</button>
+            <button id="tcHistoryTab" type="button" role="tab" aria-controls="tcHistory" aria-selected="false" tabindex="-1" data-tc-tab="tcHistory">History</button>
+          </div>
+          <div id="tcDetails" class="tc-content" role="tabpanel" aria-labelledby="tcDetailsTab"></div>
+          <div id="tcAutomation" class="tc-content" role="tabpanel" aria-labelledby="tcAutomationTab" hidden></div>
+          <div id="tcHistory" class="tc-content" role="tabpanel" aria-labelledby="tcHistoryTab" hidden>
+            <div class="tc-history-heading"><div><h4>Execution history</h4><p class="tc-hint">Newest first · logged time uses completion, last update, or creation time. Dates are shown in your local time.</p></div><button id="tcHistoryRefresh" type="button">Refresh history</button></div>
+            <p id="tcHistoryStatus" role="status" aria-live="polite">Open History to load execution results.</p>
+            <div class="tc-table-wrap"><table class="tc-table"><caption class="tc-sr-only">Test case execution history</caption><thead><tr><th>Test Suite</th><th>Test Plan</th><th>Result</th><th>Logged Date and time</th><th>Tester</th></tr></thead><tbody id="tcHistoryRows"></tbody></table></div>
+            <button id="tcHistoryMore" type="button" hidden>Load more</button>
+          </div>
+        </article>
       </div>
 
       <div class="work-page" data-work-page="user-story" role="tabpanel" hidden>
@@ -292,6 +317,7 @@
   <script src="main-tabs.js"></script>
   <script src="repo-history.js"></script>
   <script src="app.js"></script>
+  <script src="test-case-browser.js"></script>
   <script src="export-results.js"></script>
   <script src="test-assignment-workbook.js"></script>
   <script src="test-result-charts.js"></script>

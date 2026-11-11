@@ -5,7 +5,8 @@ A lightweight Python + HTML/CSS/JavaScript assistant for Azure DevOps work items
 ## Core Features
 
 - Read Azure DevOps test case details through Test Planner using a Personal Access Token (PAT).
-- Show page shells for Objective, Post Development Bug, User Story, Feature, Task, and Test Case under Work Items.
+- Work Items / Test Case supports ID/title search, one selected case, and Details, Automation, and execution History tabs.
+- Show page shells for Objective, Post Development Bug, User Story, Feature, and Task under Work Items.
 - Chat through a backend AI service using a GitHub token or another OpenAI-compatible AI endpoint.
 - Test Results workspace with Summary, Test Planner, Result Tracker, and Charts.
 - Test Planner can select ADO test cases and generate Visual Studio UFT `.playlist` files directly in the web app.
@@ -152,3 +153,19 @@ GITHUB_TOKEN=your-github-token
 ## Security Rule
 
 Never put `ADO_PAT`, `GITHUB_TOKEN`, or other secrets in frontend files. The ADO PAT is session-only and must not be written to `.env`, JSON, browser storage, logs, or other persistent files. AI credentials remain backend environment configuration.
+
+## Test Case browser
+
+Connect to ADO on Setup, then open **Work Items → Test Case**. Search is scoped to the connected project and `Test Case` work item type.
+
+- **Exact match**: full ID or full title (ADO title matching is case-insensitive).
+- **Flexible match by ID**: starting digits, ignoring spaces. `12 34` finds `1234`, `12345`, `123456`, etc.
+- **Flexible match by title**: phrase at the start first, phrase elsewhere second, then words appearing separately in the same order. `HYSYS MCP` ranks `HYSYS MCP cooler`, `Review HYSYS MCP cooler`, then `HYSYS cooler MCP validation`. Results are ranked before display pagination; IDs break ties.
+
+Select one radio button to load a case. Details shows description, preconditions, action/expected steps, planning fields, and classification. Automation shows the fields recorded in the organization's process, with ADO field display names. Shared steps are identified by ID and can be opened through the case's **Open in ADO** link. This initial browser is read-only.
+
+**History** loads execution results on demand using the Azure DevOps Test Results query API (`7.1-preview.2`), without an application date cutoff. Each page loads 50 rows with **Load more** for older retained results. Columns are Test Suite, Test Plan, Result, Logged Date and time, and Tester. Suite/plan labels come from each result's recorded references; missing references display **Not recorded**. Tester is the result's actual `runBy` identity. Logged time uses completion time, then last-updated time, then creation time, displayed in the browser's local timezone. ADO retention and PAT permissions determine which results remain accessible.
+
+Search/details need Work Items read access. History also needs Test Management access; the documented preview query endpoint lists the `vso.test_write` scope. A denied or unavailable history endpoint displays an error with retry; it is not presented as an empty history. No ADO work items or results are changed.
+
+Focused checks: `python -m pytest -q tests/test_test_case_browser.py` and `node --test tests/test_test_case_browser_frontend.cjs`. API tests use mocked ADO responses; validate the preview history endpoint with a connected organization before relying on its production history.
