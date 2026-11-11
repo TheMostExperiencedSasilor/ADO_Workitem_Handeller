@@ -170,6 +170,8 @@ Columns are Test Suite, Test Plan, Result, Logged Date and time, and Tester. Pla
 
 All History controls are beneath the table: suite/plan name-or-ID filters, Result (including **Failed**), tester, inclusive local From/To dates, Clear filters, Refresh, and page navigation. Choose **10, 20, or 30** rows per page (default 20), use First/Previous/Next/Last, or enter a page number. Filters combine and apply before display pagination; changing them resets to page one. Matching/loaded counts remain visible during background loading. Animated indeterminate progress bars cover search, detail loading, and History, with a static indicator for reduced-motion preferences.
 
+Click **Logged Date and time** in the History header to open the mini-calendar. The first date click sets the start, the second sets the inclusive end, and a third starts a new range. Earlier second dates are ordered chronologically. Selected endpoints and dates between them are highlighted. Month/year navigation, arrow/Page Up/Page Down keys, Escape, and Clear dates are supported; the calendar stays synchronized with the footer From/To filters.
+
 Search/details need Work Items read access. History also needs Test Management access; the documented preview query endpoint lists the `vso.test_write` scope. A denied or unavailable history endpoint displays an error with retry; it is not presented as an empty history. No ADO work items or results are changed.
 
 Focused checks: `python -m pytest -q tests/test_test_case_browser.py` and `node --test tests/test_test_case_browser_frontend.cjs`. API tests use mocked ADO responses; validate the preview history endpoint with a connected organization before relying on its production history.

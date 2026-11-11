@@ -8,7 +8,7 @@ function loadBrowser({ timeZone } = {}) {
   class Element {
     constructor(tag = 'div', content) {
       this.tagName = tag.toUpperCase(); this.nodeType = tag === '#text' ? 3 : 1;
-      this.childNodes = []; this.listeners = {}; this.attributes = {}; this.dataset = {};
+      this.style = {}; this.childNodes = []; this.listeners = {}; this.attributes = {}; this.dataset = {};
       this._text = content || ''; this.value = ''; this.hidden = false;
       this.classes = new Set();
       this.classList = { toggle: (name, active) => active ? this.classes.add(name) : this.classes.delete(name) };
@@ -23,6 +23,8 @@ function loadBrowser({ timeZone } = {}) {
     getAttribute(key) { return this.attributes[key]; }
     addEventListener(type, callback) { this.listeners[type] = callback; }
     focus() { this.focused = true; }
+    getBoundingClientRect() { return { top: 80, right: 400, bottom: 110, left: 200 }; }
+    contains(target) { return this === target || this.childNodes.some((child) => child.contains(target)); }
   }
   const nodes = new Map();
   const $ = (id) => { if (!nodes.has(id)) nodes.set(id, new Element()); return nodes.get(id); };
@@ -30,11 +32,14 @@ function loadBrowser({ timeZone } = {}) {
     const tab = $(`tc${name}Tab`); tab.dataset.tcTab = `tc${name}`; return tab;
   });
   $('tcField').value = 'id'; $('tcMode').value = 'exact';
+  $('tcHistoryCalendar').hidden = true;
+  const documentListeners = {};
   const calls = [];
   const context = vm.createContext({
     URL, console,
+    window: { innerWidth: 1200, innerHeight: 800, addEventListener() {} },
     Intl: timeZone ? { DateTimeFormat: function(locale, options) { return new Intl.DateTimeFormat(locale, { ...options, timeZone }); } } : Intl,
-    document: { getElementById: $, querySelectorAll: () => tabs,
+    document: { getElementById: $, querySelectorAll: () => tabs, addEventListener: (type, handler) => { documentListeners[type] = handler; },
       createElement: (tag) => new Element(tag), createTextNode: (value) => new Element('#text', value) },
     DOMParser: class { parseFromString(value) { return { body: { childNodes: [new Element('#text', value)] } }; } },
     fetch: async (url, options) => { calls.push([url, options]); return context.respond(url, options); },
@@ -47,7 +52,7 @@ function loadBrowser({ timeZone } = {}) {
   const details = (id) => ({ id, title: `Case ${id}`, url: `https://dev.azure.com/org/project/_workitems/edit/${id}`,
     fields: [{ name: 'State', referenceName: 'System.State', value: 'Design' }], steps: [] });
   const findAll = (element, predicate) => element.childNodes.flatMap((child) => [ ...(predicate(child) ? [child] : []), ...findAll(child, predicate) ]);
-  return { $, context, calls, submit, flush, json, details, Element, findAll };
+  return { $, context, calls, submit, flush, json, details, Element, findAll, documentListeners };
 }
 
 function results(count = 2) {
@@ -310,4 +315,100 @@ test('invalid accepted dates and notes remain intact', async () => {
   await submit(); await $('tcResultRows').children[0].children[0].children[0].listeners.change();
   assert.match($('tcAutomation').textContent, /Date not provided/);
   assert.match($('tcAutomation').textContent, /Accepted in HYSYS V15 AES Media 620/);
+});
+
+test('calendar selects inclusive start/end dates and third click starts a new range', async () => {
+  const { $, context, submit, json, details, flush, findAll, documentListeners } = loadBrowser();
+  const dates = ['2026-11-11T00:00:00', '2026-11-10T23:59:59.999', '2026-11-01T00:00:00', '2026-10-31T23:59:59.999'];
+  context.respond = async (url) => json(url.endsWith('/search') ? results(1) : url.includes('/history')
+    ? { history: dates.map((loggedDate, id) => ({ runId: 1, resultId: id, result: 'Failed', loggedDate })), nextSkip: null } : details(1));
+  await submit(); await $('tcResultRows').children[0].children[0].children[0].listeners.change();
+  $('tcHistoryTab').listeners.click(); await flush();
+  $('tcHistoryOutcome').value = 'Failed'; $('tcHistoryOutcome').listeners.input();
+  $('tcHistoryDateTrigger').listeners.click();
+  const day = (key) => findAll($('tcCalendarDays'), (element) => element.dataset.date === key)[0];
+  assert.equal($('tcHistoryDateTrigger').attributes['aria-expanded'], 'true');
+  const first = day('2026-11-01'); first.listeners.click();
+  // Native bubbling keeps the pre-render event path even after the day node is replaced.
+  documentListeners.click({ target: first, composedPath: () => [first, $('tcHistoryCalendar')] });
+  assert.equal($('tcHistoryCalendar').hidden, false);
+  assert.equal($('tcHistoryFrom').value, '2026-11-01');
+  assert.equal($('tcHistoryTo').value, '');
+  assert.equal($('tcCalendarHint').textContent, 'Choose an end date.');
+  day('2026-11-10').listeners.click();
+  assert.equal($('tcHistoryFrom').value, '2026-11-01');
+  assert.equal($('tcHistoryTo').value, '2026-11-10');
+  assert.equal($('tcHistoryRows').children.length, 2); // Both date boundaries included.
+  assert.ok(day('2026-11-05').classes.has('in-range'));
+  assert.ok(day('2026-11-10').classes.has('endpoint'));
+  assert.equal($('tcHistoryCalendar').hidden, false);
+  day('2026-11-08').listeners.click();
+  assert.equal($('tcHistoryFrom').value, '2026-11-08');
+  assert.equal($('tcHistoryTo').value, '');
+  assert.equal($('tcCalendarHint').textContent, 'Choose an end date.');
+  $('tcCalendarClear').listeners.click();
+  assert.equal($('tcHistoryFrom').value, ''); assert.equal($('tcHistoryTo').value, '');
+  assert.equal($('tcHistoryOutcome').value, 'Failed');
+  assert.equal($('tcHistoryRows').children.length, 4);
+});
+
+test('calendar supports leap days, month/year navigation and reversed date ranges', () => {
+  const { $, findAll } = loadBrowser();
+  $('tcHistoryDateTrigger').listeners.click();
+  $('tcCalendarYear').value = '2024'; $('tcCalendarYear').listeners.change();
+  $('tcCalendarMonth').value = '1'; $('tcCalendarMonth').listeners.change();
+  const day = (key) => findAll($('tcCalendarDays'), (element) => element.dataset.date === key)[0];
+  assert.ok(day('2024-02-29'));
+  day('2024-02-28').listeners.click();
+  $('tcCalendarNext').listeners.click();
+  day('2024-03-01').listeners.click();
+  assert.equal($('tcHistoryFrom').value, '2024-02-28');
+  assert.equal($('tcHistoryTo').value, '2024-03-01');
+  $('tcCalendarPrev').listeners.click();
+  assert.ok(day('2024-02-29').classes.has('in-range'));
+  $('tcCalendarNext').listeners.click();
+  day('2024-03-05').listeners.click(); // Third click begins again.
+  day('2024-03-01').listeners.click(); // Earlier end is normalized chronologically.
+  assert.equal($('tcHistoryFrom').value, '2024-03-01');
+  assert.equal($('tcHistoryTo').value, '2024-03-05');
+});
+
+test('calendar keyboard navigation crosses months, clamps leap dates and dismisses cleanly', () => {
+  const { $, findAll, documentListeners, Element } = loadBrowser();
+  $('tcHistoryDateTrigger').listeners.click();
+  $('tcCalendarYear').value = '2024'; $('tcCalendarYear').listeners.change();
+  $('tcCalendarMonth').value = '2'; $('tcCalendarMonth').listeners.change();
+  const day = (key) => findAll($('tcCalendarDays'), (element) => element.dataset.date === key)[0];
+  day('2024-03-31').listeners.keydown({ key: 'PageUp', preventDefault() {} });
+  assert.equal($('tcCalendarMonth').value, '1');
+  assert.equal(day('2024-02-29').tabIndex, 0);
+  assert.ok(day('2024-02-29').focused);
+  day('2024-02-29').listeners.keydown({ key: 'ArrowRight', preventDefault() {} });
+  assert.equal($('tcCalendarMonth').value, '2');
+  assert.equal(day('2024-03-01').tabIndex, 0);
+  documentListeners.keydown({ key: 'Escape', preventDefault() {} });
+  assert.equal($('tcHistoryCalendar').hidden, true);
+  assert.equal($('tcHistoryDateTrigger').attributes['aria-expanded'], 'false');
+  assert.ok($('tcHistoryDateTrigger').focused);
+  $('tcHistoryDateTrigger').listeners.click();
+  documentListeners.click({ target: new Element('div') });
+  assert.equal($('tcHistoryCalendar').hidden, true);
+});
+
+test('manual dates, Clear filters and test case changes synchronize the calendar', async () => {
+  const { $, context, submit, json, details, findAll } = loadBrowser();
+  context.respond = async (url) => json(url.endsWith('/search') ? results(2) : details(Number(url.split('/').pop())));
+  await submit(); await $('tcResultRows').children[0].children[0].children[0].listeners.change();
+  $('tcHistoryFrom').value = '2025-12-20'; $('tcHistoryTo').value = '2026-01-03'; $('tcHistoryFrom').listeners.input();
+  $('tcHistoryDateTrigger').listeners.click();
+  assert.equal($('tcCalendarYear').value, '2025'); assert.equal($('tcCalendarMonth').value, '11');
+  assert.match($('tcCalendarRange').textContent, /Dec 20, 2025.*Jan 03, 2026/);
+  $('tcHistoryClear').listeners.click();
+  assert.equal($('tcCalendarRange').textContent, 'All dates');
+  assert.equal($('tcCalendarHint').textContent, 'Choose a start date.');
+  const day = findAll($('tcCalendarDays'), (element) => element.dataset.date === '2025-12-20')[0];
+  day.listeners.click();
+  await $('tcResultRows').children[1].children[0].children[0].listeners.change();
+  assert.equal($('tcHistoryCalendar').hidden, true);
+  assert.equal($('tcHistoryFrom').value, ''); assert.equal($('tcHistoryTo').value, '');
 });

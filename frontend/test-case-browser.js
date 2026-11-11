@@ -63,6 +63,7 @@
       tab.setAttribute('aria-selected', String(active)); tab.tabIndex = active ? 0 : -1;
       $(tab.dataset.tcTab).hidden = !active;
     });
+    if (panelId !== 'tcHistory') closeCalendar(false);
     if (panelId === 'tcHistory' && !state.historyLoaded && !state.historyBusy) loadHistory(true);
   }
   tabs.forEach((tab, index) => {
@@ -108,6 +109,7 @@
   $('tcPrev').addEventListener('click', () => { state.page--; renderResults(); });
   $('tcNext').addEventListener('click', () => { state.page++; renderResults(); });
   function clearSelection() {
+    closeCalendar(false); calendar.awaitingEnd = false; calendar.focus = '';
     state.version++; state.selected = null; state.historyLoaded = false; state.historyBusy = false;
     state.nextSkip = null; state.historyRows = [];
     $('tcSelected').hidden = true; $('tcHistoryRows').replaceChildren();
@@ -217,6 +219,149 @@
     finally { if (version === state.version) $('tcDetailProgress').hidden = true; }
   }
   const historyFilterIds = ['tcHistorySuite', 'tcHistoryPlan', 'tcHistoryOutcome', 'tcHistoryTester', 'tcHistoryFrom', 'tcHistoryTo'];
+  const calendar = { month: new Date(), awaitingEnd: false, focus: '', buttons: new Map() };
+  const dayKey = (date) => `${String(date.getFullYear()).padStart(4, '0')}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+  const readDay = (key) => {
+    const date = /^\d{4}-\d{2}-\d{2}$/.test(key || '') ? new Date(`${key}T12:00:00`) : null;
+    return date && !Number.isNaN(date.getTime()) ? date : null;
+  };
+  const monthDay = (year, month, day = 1) => new Date(year, month, day, 12);
+  function calendarDateLabel(key) {
+    const date = readDay(key);
+    return date && !Number.isNaN(date.getTime()) ? new Intl.DateTimeFormat('en-US', { month: 'short', day: '2-digit', year: 'numeric' }).format(date) : '';
+  }
+  function updateCalendarTrigger() {
+    const start = $('tcHistoryFrom').value, end = $('tcHistoryTo').value;
+    $('tcHistoryDateTrigger').classList.toggle('active', Boolean(start || end));
+    $('tcHistoryDateTrigger').title = start || end
+      ? `${calendarDateLabel(start) || 'Any date'} – ${calendarDateLabel(end) || 'Any date'}. Click to choose a date range.`
+      : 'Choose a start date, then an end date. A third click starts a new range.';
+  }
+  function positionCalendar() {
+    const popup = $('tcHistoryCalendar');
+    if (popup.hidden) return;
+    const anchor = $('tcHistoryDateTrigger').getBoundingClientRect();
+    const width = popup.offsetWidth || 310, height = popup.offsetHeight || 390;
+    const left = Math.max(12, Math.min(anchor.right - width, window.innerWidth - width - 12));
+    const top = anchor.bottom + height + 8 <= window.innerHeight - 12 ? anchor.bottom + 8 : Math.max(12, anchor.top - height - 8);
+    popup.style.left = `${left}px`; popup.style.top = `${top}px`;
+  }
+  function closeCalendar(returnFocus = true) {
+    $('tcHistoryCalendar').hidden = true;
+    $('tcHistoryDateTrigger').setAttribute('aria-expanded', 'false');
+    if (returnFocus) $('tcHistoryDateTrigger').focus();
+  }
+  function chooseCalendarDay(key) {
+    let start = $('tcHistoryFrom').value;
+    if (!calendar.awaitingEnd || !start) {
+      $('tcHistoryFrom').value = key; $('tcHistoryTo').value = ''; calendar.awaitingEnd = true;
+    } else {
+      // Reversed clicks still form an inclusive chronological range.
+      $('tcHistoryFrom').value = key < start ? key : start;
+      $('tcHistoryTo').value = key < start ? start : key;
+      calendar.awaitingEnd = false;
+    }
+    const date = readDay(key);
+    calendar.month = monthDay(date.getFullYear(), date.getMonth()); calendar.focus = key;
+    goHistory(0); renderCalendar(); calendar.buttons.get(key)?.focus();
+  }
+  function moveCalendarMonth(offset) {
+    calendar.month = monthDay(calendar.month.getFullYear(), calendar.month.getMonth() + offset);
+    calendar.focus = dayKey(calendar.month); renderCalendar();
+  }
+  function calendarKeydown(event, key) {
+    const offsets = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7 };
+    if (!(event.key in offsets) && !['Home', 'End', 'PageUp', 'PageDown'].includes(event.key)) return;
+    event.preventDefault();
+    let date = readDay(key);
+    if (event.key in offsets) date.setDate(date.getDate() + offsets[event.key]);
+    else if (event.key === 'Home') date.setDate(date.getDate() - date.getDay());
+    else if (event.key === 'End') date.setDate(date.getDate() + 6 - date.getDay());
+    else {
+      const next = monthDay(date.getFullYear(), date.getMonth() + (event.key === 'PageUp' ? -1 : 1));
+      date = monthDay(next.getFullYear(), next.getMonth(), Math.min(date.getDate(), monthDay(next.getFullYear(), next.getMonth() + 1, 0).getDate()));
+    }
+    calendar.focus = dayKey(date); calendar.month = monthDay(date.getFullYear(), date.getMonth());
+    renderCalendar(); calendar.buttons.get(calendar.focus)?.focus();
+  }
+  function renderCalendar() {
+    const year = calendar.month.getFullYear(), month = calendar.month.getMonth();
+    const start = $('tcHistoryFrom').value, end = $('tcHistoryTo').value, today = dayKey(new Date());
+    const monthLabel = new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric' }).format(calendar.month);
+    $('tcCalendarMonth').replaceChildren();
+    for (let index = 0; index < 12; index++) {
+      const option = node('option', new Intl.DateTimeFormat('en-US', { month: 'long' }).format(monthDay(year, index)));
+      option.value = String(index); $('tcCalendarMonth').appendChild(option);
+    }
+    $('tcCalendarMonth').value = String(month);
+    $('tcCalendarYear').replaceChildren();
+    for (let value = Math.min(1990, year); value <= Math.max(new Date().getFullYear() + 10, year); value++) {
+      const option = node('option', String(value)); option.value = String(value); $('tcCalendarYear').appendChild(option);
+    }
+    $('tcCalendarYear').value = String(year);
+    const grid = $('tcCalendarDays'); grid.replaceChildren(); grid.setAttribute('aria-label', monthLabel);
+    const weekdays = node('div', null, 'tc-calendar-week'); weekdays.setAttribute('role', 'row');
+    ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].forEach((day) => { const cell = node('span', day); cell.setAttribute('role', 'columnheader'); weekdays.appendChild(cell); });
+    grid.appendChild(weekdays); calendar.buttons = new Map();
+    const first = monthDay(year, month); first.setDate(first.getDate() - first.getDay());
+    if (!calendar.focus) calendar.focus = start || (new Date().getMonth() === month && new Date().getFullYear() === year ? today : dayKey(calendar.month));
+    for (let week = 0; week < 6; week++) {
+      const row = node('div', null, 'tc-calendar-week'); row.setAttribute('role', 'row');
+      for (let day = 0; day < 7; day++) {
+        const date = monthDay(first.getFullYear(), first.getMonth(), first.getDate() + week * 7 + day), key = dayKey(date);
+        const endpoint = key === start || key === end, inside = Boolean(start && end && key >= start && key <= end);
+        const cell = node('div', null, 'tc-calendar-cell'); cell.setAttribute('role', 'gridcell'); cell.setAttribute('aria-selected', String(endpoint || inside));
+        const button = node('button', String(date.getDate()), 'tc-calendar-day'); button.type = 'button'; button.dataset.date = key;
+        button.classList.toggle('outside', date.getMonth() !== month); button.classList.toggle('today', key === today);
+        button.classList.toggle('endpoint', endpoint); button.classList.toggle('in-range', inside);
+        button.tabIndex = key === calendar.focus ? 0 : -1;
+        button.setAttribute('aria-label', `${calendarDateLabel(key)}${key === start ? ', start date' : ''}${key === end ? ', end date' : ''}`);
+        if (key === today) button.setAttribute('aria-current', 'date');
+        button.addEventListener('click', () => chooseCalendarDay(key));
+        button.addEventListener('keydown', (event) => calendarKeydown(event, key));
+        cell.appendChild(button); row.appendChild(cell); calendar.buttons.set(key, button);
+      }
+      grid.appendChild(row);
+    }
+    $('tcCalendarRange').textContent = start ? `${calendarDateLabel(start)}${end ? ` – ${calendarDateLabel(end)}` : ' – …'}` : end ? `Through ${calendarDateLabel(end)}` : 'All dates';
+    $('tcCalendarHint').textContent = calendar.awaitingEnd ? 'Choose an end date.' : start && end ? 'Range selected. Click a date to start a new range.' : 'Choose a start date.';
+    updateCalendarTrigger(); positionCalendar();
+  }
+  $('tcHistoryDateTrigger').addEventListener('click', () => {
+    if (!$('tcHistoryCalendar').hidden) { closeCalendar(); return; }
+    const start = readDay($('tcHistoryFrom').value);
+    const latest = state.historyRows.map((row) => new Date(row.loggedDate)).find((date) => !Number.isNaN(date.getTime()));
+    const date = start || readDay($('tcHistoryTo').value) || latest || new Date();
+    calendar.month = monthDay(date.getFullYear(), date.getMonth()); calendar.focus = dayKey(date);
+    calendar.awaitingEnd = Boolean($('tcHistoryFrom').value && !$('tcHistoryTo').value);
+    $('tcHistoryCalendar').hidden = false; $('tcHistoryDateTrigger').setAttribute('aria-expanded', 'true');
+    renderCalendar(); calendar.buttons.get(calendar.focus)?.focus();
+  });
+  $('tcCalendarPrev').addEventListener('click', () => moveCalendarMonth(-1));
+  $('tcCalendarNext').addEventListener('click', () => moveCalendarMonth(1));
+  $('tcCalendarMonth').addEventListener('change', () => {
+    calendar.month = monthDay(calendar.month.getFullYear(), Number($('tcCalendarMonth').value)); calendar.focus = dayKey(calendar.month); renderCalendar();
+  });
+  $('tcCalendarYear').addEventListener('change', () => {
+    calendar.month = monthDay(Number($('tcCalendarYear').value), calendar.month.getMonth()); calendar.focus = dayKey(calendar.month); renderCalendar();
+  });
+  $('tcCalendarClear').addEventListener('click', () => {
+    $('tcHistoryFrom').value = ''; $('tcHistoryTo').value = ''; calendar.awaitingEnd = false; goHistory(0); renderCalendar();
+  });
+  $('tcCalendarClose').addEventListener('click', () => closeCalendar());
+  $('tcCalendarDone').addEventListener('click', () => closeCalendar());
+  document.addEventListener('click', (event) => {
+    // A day click rebuilds the grid before this event bubbles. Its original
+    // event path still identifies it as an inside click after the node is gone.
+    const path = event.composedPath?.() || [];
+    if (!$('tcHistoryCalendar').hidden && !path.includes($('tcHistoryCalendar')) && !path.includes($('tcHistoryDateTrigger'))
+      && !$('tcHistoryCalendar').contains(event.target) && !$('tcHistoryDateTrigger').contains(event.target)) closeCalendar(false);
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && !$('tcHistoryCalendar').hidden) { event.preventDefault(); closeCalendar(); }
+  });
+  window.addEventListener('resize', positionCalendar);
+  document.addEventListener('scroll', positionCalendar, true);
   const outcomeKey = (value) => String(value || '').toLowerCase().replace(/[\s_-]+/g, '');
   function historySize() { const size = Number($('tcHistoryPageSize').value); return [10, 20, 30].includes(size) ? size : 20; }
   function filteredHistory() {
@@ -237,6 +382,7 @@
     });
   }
   function renderHistory() {
+    updateCalendarTrigger();
     const filtered = filteredHistory();
     const size = historySize(), pages = Math.ceil(filtered.length / size);
     state.historyPage = Math.max(0, Math.min(state.historyPage, Math.max(0, pages - 1)));
@@ -290,8 +436,15 @@
   $('tcHistoryGo').addEventListener('click', typedHistoryPage);
   $('tcHistoryPage').addEventListener('keydown', (event) => { if (event.key === 'Enter') { event.preventDefault(); typedHistoryPage(); } });
   $('tcHistoryPageSize').addEventListener('change', () => goHistory(0));
-  historyFilterIds.forEach((id) => $(id).addEventListener('input', () => goHistory(0)));
-  $('tcHistoryClear').addEventListener('click', () => { historyFilterIds.forEach((id) => { $(id).value = ''; }); goHistory(0); });
+  historyFilterIds.forEach((id) => $(id).addEventListener('input', () => {
+    if (id === 'tcHistoryFrom' || id === 'tcHistoryTo') {
+      calendar.awaitingEnd = Boolean($('tcHistoryFrom').value && !$('tcHistoryTo').value);
+      if (!$('tcHistoryCalendar').hidden) renderCalendar();
+    }
+    goHistory(0);
+  }));
+  $('tcHistoryClear').addEventListener('click', () => { historyFilterIds.forEach((id) => { $(id).value = ''; }); calendar.awaitingEnd = false; goHistory(0);
+    if (!$('tcHistoryCalendar').hidden) renderCalendar(); });
   async function loadHistory(reset = false) {
     if (!state.selected || state.historyBusy) return;
     const version = state.version;

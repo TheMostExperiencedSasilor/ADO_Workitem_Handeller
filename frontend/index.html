@@ -235,7 +235,15 @@
           <div id="tcAutomation" class="tc-content" role="tabpanel" aria-labelledby="tcAutomationTab" hidden></div>
           <div id="tcHistory" class="tc-content" role="tabpanel" aria-labelledby="tcHistoryTab" hidden>
             <div class="tc-history-heading"><div><h4>Execution history</h4><p class="tc-hint">Newest first · local dates and times. Older results load automatically; filters apply as they arrive.</p></div></div>
-            <div class="tc-table-wrap tc-history-table-wrap"><table class="tc-table"><caption class="tc-sr-only">Test case execution history</caption><thead><tr><th>Test Suite</th><th>Test Plan</th><th>Result</th><th>Logged Date and time</th><th>Tester</th></tr></thead><tbody id="tcHistoryRows"></tbody></table></div>
+            <div class="tc-table-wrap tc-history-table-wrap"><table class="tc-table"><caption class="tc-sr-only">Test case execution history</caption><thead><tr><th>Test Suite</th><th>Test Plan</th><th>Result</th><th><button id="tcHistoryDateTrigger" class="tc-date-trigger" type="button" aria-haspopup="dialog" aria-controls="tcHistoryCalendar" aria-expanded="false" aria-label="Filter logged date and time by date range">Logged Date and time <span aria-hidden="true">▾</span></button></th><th>Tester</th></tr></thead><tbody id="tcHistoryRows"></tbody></table></div>
+            <div id="tcHistoryCalendar" class="tc-calendar" role="dialog" aria-labelledby="tcCalendarTitle" hidden>
+              <div class="tc-calendar-heading"><strong id="tcCalendarTitle">Logged date range</strong><button id="tcCalendarClose" type="button" aria-label="Close date calendar">×</button></div>
+              <div class="tc-calendar-nav"><button id="tcCalendarPrev" type="button" aria-label="Previous month">‹</button><select id="tcCalendarMonth" aria-label="Calendar month"></select><select id="tcCalendarYear" aria-label="Calendar year"></select><button id="tcCalendarNext" type="button" aria-label="Next month">›</button></div>
+              <div id="tcCalendarDays" class="tc-calendar-days" role="grid" aria-label="Calendar dates"></div>
+              <p id="tcCalendarRange" class="tc-calendar-range" aria-live="polite"></p>
+              <p id="tcCalendarHint" class="tc-calendar-hint" aria-live="polite">Choose a start date.</p>
+              <div class="tc-calendar-actions"><button id="tcCalendarClear" type="button">Clear dates</button><button id="tcCalendarDone" type="button">Done</button></div>
+            </div>
             <div id="tcHistoryFooter" class="tc-history-footer">
               <div class="tc-history-filters" role="group" aria-label="Filter execution history">
                 <label>Test Suite<input id="tcHistorySuite" type="search" placeholder="Filter suite name or ID"></label>
