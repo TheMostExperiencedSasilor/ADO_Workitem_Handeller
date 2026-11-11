@@ -144,3 +144,22 @@ test('rich content retains formatting and strips scripts, event handlers and uns
   const link = findAll($('tcDetails'), (element) => element.tagName === 'A')[0];
   assert.equal(link.href, undefined);
 });
+
+test('old Flask backend 405 responses explain restart and ADO reconnection', async () => {
+  for (const status of [405, 500]) {
+    const { $, context, submit } = loadBrowser();
+    context.respond = async () => ({ ok: false, status, json: async () => ({ error: '405 Method Not Allowed: The method is not allowed for the requested URL.' }) });
+    await submit();
+    assert.match($('tcSearchStatus').textContent, /Stop and relaunch/);
+    assert.match($('tcSearchStatus').textContent, /reconnect to ADO/);
+    assert.doesNotMatch($('tcSearchStatus').textContent, /^405/);
+    assert.equal($('tcSearchButton').disabled, false);
+  }
+});
+
+test('non-JSON method errors also explain restart', async () => {
+  const { $, context, submit } = loadBrowser();
+  context.respond = async () => ({ ok: false, status: 405, json: async () => { throw new Error('HTML response'); } });
+  await submit();
+  assert.match($('tcSearchStatus').textContent, /Stop and relaunch/);
+});

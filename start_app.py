@@ -9,8 +9,11 @@ import sys
 import time
 import urllib.error
 import urllib.request
+import uuid
 import venv
 import webbrowser
+
+from backend.services.backend_revision import backend_revision
 
 ROOT = Path(__file__).resolve().parent
 BACKEND = ROOT / "backend"
@@ -62,15 +65,19 @@ def configured_url() -> str:
     return f"http://{browser_host}:{port}"
 
 
-def app_is_ready(url: str) -> bool:
+def read_health(url: str) -> dict | None:
     try:
         with urllib.request.urlopen(f"{url}/api/health", timeout=0.75) as response:
             if response.status != 200:
-                return False
+                return None
             payload = json.loads(response.read().decode("utf-8"))
-            return payload.get("status") == "ok"
+            return payload if isinstance(payload, dict) and payload.get("status") == "ok" else None
     except (OSError, ValueError, urllib.error.URLError):
-        return False
+        return None
+
+
+def app_is_ready(url: str) -> bool:
+    return read_health(url) is not None
 
 
 def setup_environment() -> None:
@@ -99,9 +106,19 @@ def setup_environment() -> None:
         stamp.write_text(digest)
 
 
-def _write_runtime(pid: int, url: str) -> None:
+def _write_runtime(pid: int, url: str, instance_id: str = "") -> None:
     RUNTIME.mkdir(parents=True, exist_ok=True)
-    PID_FILE.write_text(json.dumps({"pid": pid, "url": url}), encoding="utf-8")
+    PID_FILE.write_text(json.dumps({"pid": pid, "url": url, "instanceId": instance_id}), encoding="utf-8")
+
+
+def _owns_backend(health: dict, url: str) -> bool:
+    """Only automatically stop the exact instance recorded by this launcher."""
+    try:
+        runtime = json.loads(PID_FILE.read_text(encoding="utf-8"))
+        return (bool(health.get("instanceId")) and runtime.get("instanceId") == health["instanceId"]
+                and runtime.get("pid") == health.get("pid") and runtime.get("url") == url)
+    except (OSError, ValueError, TypeError, AttributeError):
+        return False
 
 
 def _read_runtime() -> tuple[int | None, str]:
@@ -145,7 +162,7 @@ def serve() -> int:
 
     server = make_server(host, config.flask_port, create_app(), threaded=True)
     url = f"http://{browser_host}:{server.server_port}"
-    _write_runtime(os.getpid(), url)
+    _write_runtime(os.getpid(), url, os.getenv("ADO_BACKEND_INSTANCE_ID", ""))
     print(f"Backend ready: {url}", flush=True)
     try:
         server.serve_forever()
@@ -159,15 +176,31 @@ def serve() -> int:
 
 def launch_background() -> int:
     url = configured_url()
-    if app_is_ready(url):
-        _log_launcher(f"App already running at {url}; opening browser.")
-        webbrowser.open(url)
-        return 0
+    revision = backend_revision(ROOT)
+    health = read_health(url)
+    if health:
+        if health.get("backendRevision") == revision:
+            _log_launcher(f"App already running with current code at {url}; opening browser.")
+            webbrowser.open(url)
+            return 0
+        if not _owns_backend(health, url):
+            raise RuntimeError(
+                "An older or different backend is still running. In the app folder, run "
+                "backend\\.venv\\Scripts\\python.exe start_app.py --stop on Windows "
+                "(backend/.venv/bin/python start_app.py --stop on macOS/Linux), then launch again "
+                "and reconnect to ADO. Do not just refresh the browser."
+            )
+        _log_launcher("Backend code changed; restarting the recorded app instance.")
+        stop_background(expected_instance=health["instanceId"])
+        if app_is_ready(url):
+            raise RuntimeError("The previous backend did not stop. Close it before launching again.")
 
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     RUNTIME.mkdir(parents=True, exist_ok=True)
     env = os.environ.copy()
     env["PYTHONUNBUFFERED"] = "1"
+    instance_id = uuid.uuid4().hex
+    env["ADO_BACKEND_INSTANCE_ID"] = instance_id
 
     popen_kwargs: dict = {
         "cwd": ROOT,
@@ -192,12 +225,14 @@ def launch_background() -> int:
             stderr=subprocess.STDOUT,
             **popen_kwargs,
         )
-    _write_runtime(process.pid, url)
+    _write_runtime(process.pid, url, instance_id)
     _log_launcher(f"Started background backend PID {process.pid}; waiting for {url}.")
 
     deadline = time.monotonic() + START_TIMEOUT_SECONDS
     while time.monotonic() < deadline:
-        if app_is_ready(url):
+        health = read_health(url)
+        if (health and health.get("backendRevision") == revision
+                and health.get("instanceId") == instance_id and health.get("pid") == process.pid):
             _log_launcher(f"App ready at {url}; opening browser.")
             webbrowser.open(url)
             return 0
@@ -218,8 +253,12 @@ def launch_background() -> int:
     )
 
 
-def stop_background() -> int:
+def stop_background(expected_instance: str | None = None) -> int:
     pid, url = _read_runtime()
+    if expected_instance is not None:
+        health = read_health(url)
+        if not health or health.get("instanceId") != expected_instance or not _owns_backend(health, url):
+            raise RuntimeError("The running app changed before restart. Launch again to recheck it.")
     if not app_is_ready(url):
         _clear_runtime_for_pid(pid)
         _log_launcher("Stop requested, but no running app was detected.")
