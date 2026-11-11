@@ -2,7 +2,8 @@
   const $ = (id) => document.getElementById(id);
   if (!$('tcSearch')) return;
   const state = { results: [], page: 0, selected: null, version: 0, searchVersion: 0,
-    historyLoaded: false, historyBusy: false, nextSkip: null, historyRows: [] };
+    historyLoaded: false, historyBusy: false, nextSkip: null, historyRows: [], historyPage: 0,
+    historyError: '', historyPageMessage: '', historyWarnings: new Set(), historyFilterError: '' };
   const pageSize = 10;
   const tabs = [...document.querySelectorAll('[data-tc-tab]')];
   const text = (value) => {
@@ -111,6 +112,9 @@
     state.nextSkip = null; state.historyRows = [];
     $('tcSelected').hidden = true; $('tcHistoryRows').replaceChildren();
     $('tcHistoryMore').hidden = true; $('tcHistoryRefresh').disabled = false;
+    $('tcDetailProgress').hidden = true; $('tcHistoryProgress').hidden = true;
+    state.historyPage = 0; state.historyError = ''; state.historyPageMessage = ''; state.historyWarnings = new Set();
+    historyFilterIds.forEach((id) => { $(id).value = ''; }); renderHistory();
     message('tcDetailStatus', ''); message('tcHistoryStatus', 'Open History to load execution results.');
   }
   $('tcSearch').addEventListener('submit', async (event) => {
@@ -118,6 +122,7 @@
     const version = ++state.searchVersion;
     clearSelection(); state.results = []; state.page = 0; renderResults();
     $('tcSearchButton').disabled = true; $('tcSearch').setAttribute('aria-busy', 'true');
+    $('tcSearchProgress').hidden = false;
     message('tcSearchStatus', 'Searching ADO Test Cases…');
     try {
       const data = await request('/api/work-items/test-cases/search', { method: 'POST', body: JSON.stringify({
@@ -129,7 +134,7 @@
     } catch (error) {
       if (version === state.searchVersion) message('tcSearchStatus', error.message, true);
     } finally {
-      if (version === state.searchVersion) { $('tcSearchButton').disabled = false; $('tcSearch').setAttribute('aria-busy', 'false'); }
+      if (version === state.searchVersion) { $('tcSearchButton').disabled = false; $('tcSearchProgress').hidden = true; $('tcSearch').setAttribute('aria-busy', 'false'); }
     }
   });
   const normalized = (value) => value.replace(/[^a-z0-9]/gi, '').toLowerCase();
@@ -183,44 +188,119 @@
   }
   async function selectCase(id) {
     clearSelection(); state.selected = id; const version = state.version;
-    renderResults(); message('tcDetailStatus', `Loading Test Case ${id}…`);
+    renderResults(); $('tcDetailProgress').hidden = false; message('tcDetailStatus', `Loading Test Case ${id}…`);
     try {
       const data = await request(`/api/work-items/test-cases/${id}`);
       if (version !== state.version) return;
       renderCase(data); message('tcDetailStatus', data.warning || '');
     } catch (error) { if (version === state.version) message('tcDetailStatus', error.message, true); }
+    finally { if (version === state.version) $('tcDetailProgress').hidden = true; }
+  }
+  const historyFilterIds = ['tcHistorySuite', 'tcHistoryPlan', 'tcHistoryOutcome', 'tcHistoryTester', 'tcHistoryFrom', 'tcHistoryTo'];
+  const outcomeKey = (value) => String(value || '').toLowerCase().replace(/[\s_-]+/g, '');
+  function historySize() { const size = Number($('tcHistoryPageSize').value); return [10, 20, 30].includes(size) ? size : 20; }
+  function filteredHistory() {
+    const contains = (value, id) => String(value || '').toLowerCase().includes($(id).value.trim().toLowerCase());
+    const wanted = outcomeKey($('tcHistoryOutcome').value);
+    const from = $('tcHistoryFrom').value ? new Date(`${$('tcHistoryFrom').value}T00:00:00`) : null;
+    const to = $('tcHistoryTo').value ? new Date(`${$('tcHistoryTo').value}T23:59:59.999`) : null;
+    state.historyFilterError = from && to && from > to ? 'From date must be on or before To date.' : '';
+    return state.historyFilterError ? [] : state.historyRows.filter((item) => {
+      const outcome = outcomeKey(item.result);
+      const resultMatch = !wanted || (wanted === 'other'
+        ? !['failed', 'passed', 'blocked', 'notexecuted', 'notrun', 'inconclusive', 'aborted'].includes(outcome)
+        : wanted === 'notexecuted' ? ['notexecuted', 'notrun'].includes(outcome) : outcome === wanted);
+      const date = new Date(item.loggedDate);
+      return contains(item.testSuite, 'tcHistorySuite') && contains(item.testPlan, 'tcHistoryPlan')
+        && contains(item.tester, 'tcHistoryTester') && resultMatch
+        && (!(from || to) || (!Number.isNaN(date.getTime()) && (!from || date >= from) && (!to || date <= to)));
+    });
   }
   function renderHistory() {
+    const filtered = filteredHistory();
+    const size = historySize(), pages = Math.ceil(filtered.length / size);
+    state.historyPage = Math.max(0, Math.min(state.historyPage, Math.max(0, pages - 1)));
     $('tcHistoryRows').replaceChildren();
-    state.historyRows.forEach((item) => {
+    filtered.slice(state.historyPage * size, (state.historyPage + 1) * size).forEach((item) => {
       const row = node('tr');
       const date = new Date(item.loggedDate);
       const dateText = item.loggedDate && !Number.isNaN(date.getTime()) ? date.toLocaleString() : 'Not recorded';
       for (const value of [item.testSuite, item.testPlan, item.result, dateText, item.tester || 'Not recorded']) row.appendChild(node('td', text(value)));
       const resultCell = row.children[2];
-      resultCell.className = item.result.toLowerCase() === 'passed' ? 'tc-passed' : item.result.toLowerCase() === 'failed' ? 'tc-failed' : '';
+      resultCell.className = outcomeKey(item.result) === 'passed' ? 'tc-passed' : outcomeKey(item.result) === 'failed' ? 'tc-failed' : '';
       row.children[3].title = item.loggedDate;
       $('tcHistoryRows').appendChild(row);
     });
+    if (!filtered.length && state.historyLoaded) {
+      const row = node('tr'), cell = node('td', state.historyBusy ? 'No matches loaded yet. Older results are still loading…' : 'No execution results match the current filters.', 'tc-history-empty');
+      cell.colSpan = 5; row.appendChild(cell); $('tcHistoryRows').appendChild(row);
+    }
+    $('tcHistoryFirst').disabled = $('tcHistoryPrev').disabled = state.historyPage === 0;
+    $('tcHistoryNext').disabled = $('tcHistoryLast').disabled = state.historyPage >= pages - 1;
+    if (document.activeElement !== $('tcHistoryPage')) $('tcHistoryPage').value = state.historyPage + 1;
+    $('tcHistoryPage').max = Math.max(1, pages);
+    $('tcHistoryPageTotal').textContent = `of ${pages}${state.historyBusy ? ' so far' : ''}`;
+    $('tcHistoryCount').textContent = `${filtered.length} matching of ${state.historyRows.length} loaded${state.historyBusy ? ' so far' : ''}`;
+    $('tcHistoryRefresh').disabled = state.historyBusy;
+    $('tcHistoryMore').hidden = !state.historyError;
+    $('tcHistoryMore').disabled = state.historyBusy;
+    $('tcHistoryProgress').hidden = !state.historyBusy;
+    $('tcHistory').setAttribute('aria-busy', String(state.historyBusy));
+    const status = state.historyError ? `${state.historyError} Use Retry loading to continue, or Refresh history to start again.`
+      : state.historyBusy ? `Loading execution history… ${state.historyRows.length} results loaded; searching older executions.`
+      : !state.historyLoaded ? 'Open History to load execution results.'
+      : state.historyRows.length ? `${state.historyRows.length} execution results loaded. All available history has been checked.`
+      : 'No execution history returned by ADO for this test case.';
+    const warning = [...state.historyWarnings].join(' ');
+    message('tcHistoryStatus', [state.historyFilterError, state.historyPageMessage, status, warning].filter(Boolean).join(' '),
+      Boolean(state.historyError || state.historyFilterError || state.historyPageMessage));
   }
+  function goHistory(page) { state.historyPage = page; state.historyPageMessage = ''; renderHistory(); }
+  $('tcHistoryFirst').addEventListener('click', () => goHistory(0));
+  $('tcHistoryPrev').addEventListener('click', () => goHistory(state.historyPage - 1));
+  $('tcHistoryNext').addEventListener('click', () => goHistory(state.historyPage + 1));
+  $('tcHistoryLast').addEventListener('click', () => goHistory(Math.ceil(filteredHistory().length / historySize()) - 1));
+  function typedHistoryPage() {
+    const page = Number($('tcHistoryPage').value), pages = Math.ceil(filteredHistory().length / historySize());
+    if (!Number.isInteger(page) || page < 1 || page > pages) {
+      state.historyPageMessage = 'Enter an available page number. Older pages may still be loading.'; renderHistory(); return;
+    }
+    goHistory(page - 1);
+  }
+  $('tcHistoryGo').addEventListener('click', typedHistoryPage);
+  $('tcHistoryPage').addEventListener('keydown', (event) => { if (event.key === 'Enter') { event.preventDefault(); typedHistoryPage(); } });
+  $('tcHistoryPageSize').addEventListener('change', () => goHistory(0));
+  historyFilterIds.forEach((id) => $(id).addEventListener('input', () => goHistory(0)));
+  $('tcHistoryClear').addEventListener('click', () => { historyFilterIds.forEach((id) => { $(id).value = ''; }); goHistory(0); });
   async function loadHistory(reset = false) {
     if (!state.selected || state.historyBusy) return;
     const version = state.version;
-    const skip = reset ? 0 : state.nextSkip;
+    let skip = reset ? 0 : state.nextSkip;
     if (skip === null) return;
-    state.historyBusy = true;
-    if (reset) { state.historyRows = []; state.nextSkip = null; renderHistory(); $('tcHistoryMore').hidden = true; }
-    $('tcHistoryRefresh').disabled = true; $('tcHistoryMore').disabled = true;
-    message('tcHistoryStatus', 'Loading execution history…');
+    state.historyBusy = true; state.historyError = ''; state.historyPageMessage = '';
+    if (reset) { state.historyRows = []; state.historyLoaded = false; state.nextSkip = null; state.historyPage = 0; state.historyWarnings = new Set(); }
+    renderHistory();
     try {
-      const data = await request(`/api/work-items/test-cases/${state.selected}/history?skip=${skip}`);
-      if (version !== state.version) return;
-      state.historyRows.push(...data.history); state.nextSkip = data.nextSkip; state.historyLoaded = true;
-      renderHistory(); $('tcHistoryMore').hidden = data.nextSkip === null;
-      message('tcHistoryStatus', state.historyRows.length ? `${state.historyRows.length} execution result${state.historyRows.length === 1 ? '' : 's'} loaded.${data.nextSkip !== null ? ' Load more for older results.' : ''}`
-        : 'No execution history returned by ADO for this test case.');
-    } catch (error) { if (version === state.version) message('tcHistoryStatus', `${error.message} Use Refresh history to retry.`, true); }
-    finally { if (version === state.version) { state.historyBusy = false; $('tcHistoryRefresh').disabled = false; $('tcHistoryMore').disabled = false; } }
+      do {
+        const data = await request(`/api/work-items/test-cases/${state.selected}/history?skip=${skip}`);
+        if (version !== state.version) return;
+        if (!Array.isArray(data.history) || (data.nextSkip !== null && (!Number.isInteger(data.nextSkip) || data.nextSkip <= skip))) {
+          throw new Error('ADO returned an invalid history page.');
+        }
+        const identities = new Set(state.historyRows.filter((item) => item.runId != null && item.resultId != null).map((item) => `${item.runId}:${item.resultId}`));
+        data.history.forEach((item) => {
+          const key = item.runId != null && item.resultId != null ? `${item.runId}:${item.resultId}` : null;
+          if (!key || !identities.has(key)) { state.historyRows.push(item); if (key) identities.add(key); }
+        });
+        (data.warnings || []).forEach((warning) => state.historyWarnings.add(warning));
+        state.nextSkip = data.nextSkip; state.historyLoaded = true;
+        renderHistory(); skip = data.nextSkip;
+      } while (skip !== null);
+    } catch (error) {
+      if (version === state.version) { state.historyError = error.message; state.nextSkip = skip; }
+    } finally {
+      if (version === state.version) { state.historyBusy = false; renderHistory(); }
+    }
   }
   $('tcHistoryRefresh').addEventListener('click', () => loadHistory(true));
   $('tcHistoryMore').addEventListener('click', () => loadHistory(false));

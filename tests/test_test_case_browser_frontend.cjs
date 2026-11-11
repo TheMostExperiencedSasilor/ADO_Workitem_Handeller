@@ -77,8 +77,8 @@ test('search pagination, one-case radios, keyboard tabs, lazy history and load m
   assert.equal($('tcHistoryTab').attributes['aria-selected'], 'true');
   assert.equal($('tcHistoryRows').children[0].children.length, 5);
   assert.equal($('tcHistoryRows').children[0].children[4].textContent, 'Actual tester');
-  assert.equal($('tcHistoryMore').hidden, false);
-  $('tcHistoryMore').listeners.click(); await flush();
+  assert.equal($('tcHistoryMore').hidden, true); // Older pages load automatically.
+  assert.equal($('tcHistoryProgress').hidden, true);
   assert.ok(calls.some(([url]) => url.endsWith('/history?skip=50')));
   assert.equal($('tcHistoryMore').hidden, true);
   await $('tcResultRows').children[1].children[0].children[0].listeners.change();
@@ -162,4 +162,108 @@ test('non-JSON method errors also explain restart', async () => {
   context.respond = async () => ({ ok: false, status: 405, json: async () => { throw new Error('HTML response'); } });
   await submit();
   assert.match($('tcSearchStatus').textContent, /Stop and relaunch/);
+});
+
+test('history filters find older failures while background pages load and footer pagination stays local', async () => {
+  const { $, context, submit, json, details, flush, calls } = loadBrowser();
+  const row = (id, result) => ({ resultId: id, runId: 99, testSuite: result === 'Failed' ? 'Beta Suite (7)' : 'Alpha Suite (6)',
+    testPlan: 'Release Plan (8)', result, loggedDate: result === 'Failed' ? '2026-10-29T12:00:00' : '2026-11-01T12:00:00', tester: 'Johnie' });
+  let older;
+  context.respond = async (url) => {
+    if (url.endsWith('/search')) return json(results(1));
+    if (!url.includes('/history')) return json(details(1));
+    if (url.endsWith('skip=0')) return json({ history: Array.from({ length: 50 }, (_, i) => row(i, 'Passed')), nextSkip: 50 });
+    return new Promise((resolve) => { older = () => resolve(json({ history: Array.from({ length: 10 }, (_, i) => row(50 + i, 'Failed')), nextSkip: null })); });
+  };
+  await submit(); await $('tcResultRows').children[0].children[0].children[0].listeners.change();
+  $('tcHistoryTab').listeners.click(); await flush();
+  assert.equal($('tcHistoryRows').children.length, 20);
+  assert.equal($('tcHistoryProgress').hidden, false);
+  assert.match($('tcHistoryCount').textContent, /50 loaded so far/);
+  $('tcHistoryOutcome').value = 'Failed'; $('tcHistoryOutcome').listeners.input();
+  assert.match($('tcHistoryRows').textContent, /Older results are still loading/);
+  older(); await flush();
+  assert.equal($('tcHistoryProgress').hidden, true);
+  assert.equal($('tcHistoryRows').children.length, 10);
+  assert.match($('tcHistoryCount').textContent, /10 matching of 60 loaded/);
+  assert.match($('tcHistoryStatus').textContent, /All available history has been checked/);
+  for (const [id, value] of [['tcHistorySuite', 'bEtA'], ['tcHistoryPlan', 'release'], ['tcHistoryTester', 'JOHNIE'],
+    ['tcHistoryFrom', '2026-10-29'], ['tcHistoryTo', '2026-10-29']]) { $(id).value = value; $(id).listeners.input(); }
+  assert.equal($('tcHistoryRows').children.length, 10);
+  $('tcHistoryTester').value = 'Other tester'; $('tcHistoryTester').listeners.input();
+  assert.match($('tcHistoryRows').textContent, /No execution results match/);
+  $('tcHistoryClear').listeners.click();
+  assert.equal($('tcHistoryRows').children.length, 20);
+  const requestCount = calls.length;
+  $('tcHistoryPageSize').value = '10'; $('tcHistoryPageSize').listeners.change();
+  assert.equal($('tcHistoryRows').children.length, 10);
+  assert.equal($('tcHistoryPageTotal').textContent, 'of 6');
+  $('tcHistoryLast').listeners.click();
+  assert.equal($('tcHistoryPage').value, 6);
+  assert.equal($('tcHistoryNext').disabled, true);
+  assert.match($('tcHistoryRows').textContent, /Failed/);
+  $('tcHistoryPage').value = '2'; $('tcHistoryGo').listeners.click();
+  assert.equal($('tcHistoryPage').value, 2);
+  $('tcHistoryPrev').listeners.click();
+  assert.equal($('tcHistoryFirst').disabled, true);
+  $('tcHistoryPage').value = '999'; $('tcHistoryGo').listeners.click();
+  assert.match($('tcHistoryStatus').textContent, /Enter an available page number/);
+  assert.equal(calls.length, requestCount); // Filters and page navigation do not refetch ADO.
+});
+
+test('history retains partial rows on failure, retries the failed page and deduplicates overlapping results', async () => {
+  const { $, context, submit, json, details, flush } = loadBrowser();
+  const row = (id) => ({ runId: 9, resultId: id, testSuite: 'Suite', testPlan: 'Plan', result: 'Failed', tester: 'Tester' });
+  let fail = true;
+  context.respond = async (url) => {
+    if (url.endsWith('/search')) return json(results(1));
+    if (!url.includes('/history')) return json(details(1));
+    if (url.endsWith('skip=0')) return json({ history: [row(1)], nextSkip: 50 });
+    return fail ? json({ error: 'ADO timeout' }, false) : json({ history: [row(1), row(2)], nextSkip: null, warnings: ['One name unavailable.'] });
+  };
+  await submit(); await $('tcResultRows').children[0].children[0].children[0].listeners.change();
+  $('tcHistoryTab').listeners.click(); await flush();
+  assert.equal($('tcHistoryProgress').hidden, true);
+  assert.equal($('tcHistoryRows').children.length, 1);
+  assert.equal($('tcHistoryMore').hidden, false);
+  assert.match($('tcHistoryStatus').textContent, /ADO timeout/);
+  assert.doesNotMatch($('tcHistoryStatus').textContent, /All available history/);
+  fail = false;
+  $('tcHistoryMore').listeners.click(); await flush();
+  assert.equal($('tcHistoryRows').children.length, 2);
+  assert.equal($('tcHistoryMore').hidden, true);
+  assert.match($('tcHistoryStatus').textContent, /One name unavailable/);
+});
+
+test('progress bars cover pending searches and details, then clear after errors or completion', async () => {
+  const { $, context, submit, json, details } = loadBrowser();
+  let finishSearch, finishDetail;
+  context.respond = async (url) => url.endsWith('/search')
+    ? new Promise((resolve) => { finishSearch = () => resolve(json(results(1))); })
+    : new Promise((resolve) => { finishDetail = () => resolve(json(details(1))); });
+  const search = submit();
+  assert.equal($('tcSearchProgress').hidden, false);
+  finishSearch(); await search;
+  assert.equal($('tcSearchProgress').hidden, true);
+  const detail = $('tcResultRows').children[0].children[0].children[0].listeners.change();
+  assert.equal($('tcDetailProgress').hidden, false);
+  finishDetail(); await detail;
+  assert.equal($('tcDetailProgress').hidden, true);
+  context.respond = async () => json({ error: 'Search failed' }, false);
+  await submit();
+  assert.equal($('tcSearchProgress').hidden, true);
+  assert.equal($('tcDetailProgress').hidden, true);
+});
+
+test('invalid date range and non-advancing ADO pages report errors without claiming complete history', async () => {
+  const { $, context, submit, json, details, flush } = loadBrowser();
+  context.respond = async (url) => json(url.endsWith('/search') ? results(1) : url.includes('/history')
+    ? { history: [], nextSkip: 0 } : details(1));
+  await submit(); await $('tcResultRows').children[0].children[0].children[0].listeners.change();
+  $('tcHistoryTab').listeners.click(); await flush();
+  assert.match($('tcHistoryStatus').textContent, /invalid history page/);
+  assert.equal($('tcHistoryMore').hidden, false);
+  $('tcHistoryFrom').value = '2026-11-10'; $('tcHistoryTo').value = '2026-11-01';
+  $('tcHistoryFrom').listeners.input();
+  assert.match($('tcHistoryStatus').textContent, /From date must be on or before/);
 });
