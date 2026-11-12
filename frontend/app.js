@@ -30,8 +30,10 @@ function updateConnectAdoButtonState() {
 }
 
 function markSetupDirty() {
-  setSetupStatus('Unsaved changes');
+  setSetupStatus('Changes not verified');
+  setAdoConnection('Connection details changed');
   setSetupError();
+  adoPatInput.removeAttribute('aria-invalid');
   updateConnectAdoButtonState();
 }
 
@@ -125,6 +127,7 @@ async function connectToAdo() {
   adoConnecting = true;
   updateConnectAdoButtonState();
   setAdoConnection('Connecting to ADO…', 'connecting');
+  adoPatInput.removeAttribute('aria-invalid');
   setSetupError();
 
   try {
@@ -141,6 +144,10 @@ async function connectToAdo() {
     setSetupStatus('Not connected', 'error');
     setAdoConnection('ADO not connected', 'error');
     setSetupError(error.message);
+    // Only mark the PAT field when authentication specifically failed.
+    if (/authentication failed|check your ADO PAT/i.test(error.message)) {
+      adoPatInput.setAttribute('aria-invalid', 'true');
+    }
   } finally {
     adoConnecting = false;
     updateConnectAdoButtonState();

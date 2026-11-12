@@ -42,7 +42,13 @@ class AdoClient:
             timeout=30,
         )
         response.raise_for_status()
+        # Some gateways and failed sign-ins return HTML/text with HTTP 200.
+        # Never surface the resulting JSON parser exception to users.
+        if "application/json" not in response.headers.get("Content-Type", "").lower():
+            raise ValueError("Unexpected Azure DevOps response format.")
         data = response.json()
+        if not isinstance(data, dict) or not data.get("id") or not data.get("name"):
+            raise ValueError("Unexpected Azure DevOps project response.")
         return {
             "id": data.get("id"),
             "name": data.get("name"),

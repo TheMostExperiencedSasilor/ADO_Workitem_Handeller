@@ -222,6 +222,16 @@ h3 {
 .setup-error {
   color: var(--danger);
   margin: 12px 0 0;
+  padding: 12px 14px;
+  border: 1px solid #f3aaa4;
+  border-radius: 6px;
+  background: #fff1f0;
+  line-height: 1.45;
+}
+.setup-error[hidden] { display: none; }
+.setup-panel input[aria-invalid="true"] {
+  border-color: var(--danger);
+  background: #fffafa;
 }
 
 .work-tabs {

@@ -44,16 +44,27 @@ def _connection_error(error: Exception):
         return jsonify({"error": "ADO connection timed out. Please try again."}), 504
     if isinstance(error, requests.HTTPError):
         status = error.response.status_code if error.response is not None else None
-        if status in (401, 403):
-            message = "ADO authentication or access failed. Check your PAT and permissions."
+        if status == 401:
+            message = "Authentication failed. Please check your ADO PAT."
+        elif status == 403:
+            message = "Access denied. Check your PAT permissions and project access."
         elif status == 404:
-            message = "ADO project was not found or is not accessible."
+            message = "ADO organization or project not found, or you do not have access."
+        elif status == 429:
+            message = "Azure DevOps is receiving too many requests. Please try again later."
+        elif status is not None and status >= 500:
+            message = "Azure DevOps is temporarily unavailable. Please try again later."
         else:
-            message = "ADO connection failed. Please try again."
-        return jsonify({"error": message}), status if status in (401, 403, 404) else 502
+            message = "Unable to connect to Azure DevOps. Please try again."
+        return jsonify({"error": message}), status if status in (401, 403, 404, 429) else 502
+    if isinstance(error, requests.ConnectionError):
+        return jsonify({"error": "Unable to reach Azure DevOps. Check your network connection."}), 503
+    if isinstance(error, requests.RequestException):
+        return jsonify({"error": "Unable to connect to Azure DevOps. Please try again."}), 502
+    # Do not expose raw JSON parsing errors, exception text, or request data.
     if isinstance(error, (ValueError, RuntimeError)):
-        return jsonify({"error": str(error)}), 400
-    return jsonify({"error": "ADO connection failed. Please try again."}), 502
+        return jsonify({"error": "Azure DevOps returned an unexpected response. Verify your organization, project, and PAT."}), 502
+    return jsonify({"error": "Unable to connect to Azure DevOps. Please try again."}), 502
 
 
 @setup_bp.post("")
