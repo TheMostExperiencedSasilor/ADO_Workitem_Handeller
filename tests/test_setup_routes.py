@@ -1,5 +1,8 @@
 import os
 import sys
+
+import pytest
+import requests
 from dataclasses import replace
 from pathlib import Path
 from unittest.mock import Mock
@@ -91,7 +94,8 @@ def test_failed_connect_does_not_keep_pat(monkeypatch, tmp_path):
         "adoPat": "bad-secret",
     })
 
-    assert response.status_code == 400
+    assert response.status_code == 502
+    assert "bad credentials" not in response.json["error"]
     assert ado_session_connected() is False
 
 
@@ -120,6 +124,7 @@ def test_ado_connection_uses_30_second_timeout(monkeypatch):
 
     response = Mock()
     response.raise_for_status = Mock()
+    response.headers = {"Content-Type": "application/json"}
     response.json.return_value = {
         "id": "project-id",
         "name": "AspenTech SAFe",
@@ -131,3 +136,41 @@ def test_ado_connection_uses_30_second_timeout(monkeypatch):
     AdoClient(config).test_connection()
 
     assert get.call_args.kwargs["timeout"] == 30
+
+
+@pytest.mark.parametrize(("failure", "status", "message"), [
+    (requests.HTTPError(response=Mock(status_code=401)), 401, "Authentication failed"),
+    (requests.HTTPError(response=Mock(status_code=403)), 403, "Access denied"),
+    (requests.HTTPError(response=Mock(status_code=404)), 404, "organization or project"),
+    (requests.Timeout(), 504, "timed out"),
+    (requests.ConnectionError(), 503, "network connection"),
+    (ValueError("Expecting value: line 3 column 1 (char 4)"), 502, "unexpected response"),
+])
+def test_connection_errors_are_actionable_and_safe(monkeypatch, tmp_path, failure, status, message):
+    clear_ado_session()
+    monkeypatch.setattr(setup_routes, "ENV_PATH", tmp_path / ".env")
+    monkeypatch.setattr(AdoClient, "test_connection", Mock(side_effect=failure))
+    response = create_app().test_client().post("/api/setup", json={
+        "adoOrganization": "example-org",
+        "adoProject": "Example Project",
+        "adoPat": "private-test-token",
+    })
+    assert response.status_code == status
+    assert message.lower() in response.json["error"].lower()
+    assert "private-test-token" not in response.get_data(as_text=True)
+    assert "Expecting value" not in response.get_data(as_text=True)
+    assert not ado_session_connected()
+
+
+def test_connection_rejects_html_success_response(monkeypatch):
+    monkeypatch.setenv("ADO_ORGANIZATION", "example-org")
+    monkeypatch.setenv("ADO_PROJECT", "Example Project")
+    config = replace(AppConfig.from_env(), ado_pat="private-test-token")
+    response = Mock()
+    response.headers = {"Content-Type": "text/html"}
+    response.raise_for_status = Mock()
+    response.json.side_effect = ValueError("Expecting value")
+    monkeypatch.setattr("services.ado_client.requests.get", Mock(return_value=response))
+    with pytest.raises(ValueError, match="Unexpected Azure DevOps response format"):
+        AdoClient(config).test_connection()
+    response.json.assert_not_called()
