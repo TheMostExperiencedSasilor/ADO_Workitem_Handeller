@@ -11,14 +11,14 @@ fi
 
 PYTHON=""
 for candidate in python3 python; do
-  if command -v "$candidate" >/dev/null 2>&1 &&      "$candidate" -c 'import sys; sys.exit(sys.version_info < (3, 10))' >/dev/null 2>&1; then
+  if command -v "$candidate" >/dev/null 2>&1 &&      "$candidate" -c 'import sys; sys.exit(sys.version_info < (3, 11))' >/dev/null 2>&1; then
     PYTHON="$candidate"
     break
   fi
 done
 
 if [ -z "$PYTHON" ]; then
-  printf '%s\n' "Python 3.10 or newer is required."
+  printf '%s\n' "Python 3.11 or newer is required."
   exit 1
 fi
 

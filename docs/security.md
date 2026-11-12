@@ -2,29 +2,15 @@
 
 ## Token Handling
 
-Secrets must stay in `backend/.env` only:
+The ADO PAT and Copilot PAT entered in Setup are session-only. They are kept in backend process memory, never written to `.env`, browser storage, JSON exports, or logs, and never returned by status endpoints. Password inputs clear after successful connection. Disconnecting AI removes its in-memory credential; stopping the backend removes both credentials.
 
-- `ADO_PAT`
-- `GITHUB_TOKEN`
-- any future AI provider token
-
-The frontend must never contain these values. Do not place secrets in:
-
-- `frontend/index.html`
-- `frontend/app.js`
-- browser local storage
-- query strings
-- screenshots or logs
+Only non-secret ADO organization/project settings are persisted. Legacy `ADO_PAT` entries are removed at startup. Legacy AI environment settings are no longer used; remove any old `GITHUB_TOKEN` from local `.env` files.
 
 ## Setup Section
 
-The browser setup section is intended for local development. It sends the entered PAT/token to the backend over the local Flask API and the backend writes the values into `backend/.env`.
+The browser sends entered credentials to the local Flask backend. This is a local single-user app with process-wide connections, like the existing ADO session. Do not expose its setup/chat APIs publicly. A browser refresh clears the conversation but leaves the running backend's connection available until disconnect/termination.
 
-The setup status endpoint only returns whether values are configured. It does not return the real PAT or token.
-
-After saving setup, the password fields are cleared in the browser.
-
-Do not expose this app publicly while the setup endpoint is enabled.
+The Copilot runtime uses a temporary base/working directory, disables config discovery, skills, session storage, and built-in tools, rejects permission requests, and deletes its temporary session after a turn. Only explicitly attached work-item fields are sent to Copilot, alongside the question and bounded conversation transcript. ADO credentials are not included in prompts.
 
 ## Why Backend-Only Tokens Matter
 

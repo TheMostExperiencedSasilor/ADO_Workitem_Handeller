@@ -215,7 +215,9 @@ def test_summary_section_is_served_and_endpoint_registered():
 def test_project_path_encoded_once_for_all_readers(config, monkeypatch, project, encoded):
     from dataclasses import replace
     client = AdoClient(replace(config, ado_project=project))
-    get = Mock(return_value=page([]))
+    project_response = Mock(status_code=200, headers={'Content-Type': 'application/json'},
+                            json=Mock(return_value={'id': 'project-id', 'name': project}))
+    get = Mock(side_effect=[project_response, page([]), page([])])
     monkeypatch.setattr('services.ado_client.requests.get', get)
     client.test_connection()
     client.read_work_items([123])

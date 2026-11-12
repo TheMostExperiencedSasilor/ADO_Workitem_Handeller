@@ -81,8 +81,8 @@ def app_is_ready(url: str) -> bool:
 
 
 def setup_environment() -> None:
-    if sys.version_info < (3, 10):
-        raise RuntimeError("Python 3.10 or newer is required.")
+    if sys.version_info < (3, 11):
+        raise RuntimeError("Python 3.11 or newer is required.")
     if not ENV_PYTHON.exists():
         _log_launcher("Creating the app's Python environment.")
         venv.EnvBuilder(with_pip=True).create(ENV)

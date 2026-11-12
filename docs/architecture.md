@@ -16,7 +16,7 @@ Browser UI
   -> Flask API
     -> backend/.env for local setup values
     -> Azure DevOps REST API
-    -> AI chat/completions endpoint
+    -> GitHub Copilot SDK runtime -> Copilot service
 ```
 
 ## Backend Modules
@@ -24,7 +24,8 @@ Browser UI
 - `app.py`: Flask app factory, route registration, frontend hosting.
 - `config.py`: environment variable loading and validation.
 - `services/ado_client.py`: Azure DevOps REST API reads, test run updates, and connection checks.
-- `services/ai_client.py`: AI chat calls.
+- `services/ai_client.py`: isolated Copilot SDK runtimes for model discovery and chat.
+- `services/ai_session.py`: process-memory Copilot connection and credential.
 - `routes/setup_routes.py`: local setup status, `.env` writing, and ADO connection status endpoints.
 - `routes/work_item_routes.py`: work item read endpoint used by Test Planner.
 - `routes/chat_routes.py`: floating chatbox endpoint.
@@ -36,6 +37,9 @@ Browser UI
 - `GET /api/setup/ado-connection`
 - `POST /api/setup`
 - `POST /api/work-items/read`
+- `GET /api/chat/status`
+- `POST /api/chat/connect`
+- `POST /api/chat/disconnect`
 - `POST /api/chat`
 
 ## Work Item Types
