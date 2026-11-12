@@ -55,7 +55,7 @@ try {
         } else {
             $command = Get-Command pythonw.exe -ErrorAction SilentlyContinue
             if (-not $command) {
-                throw 'Python 3.10+ with pyw.exe or pythonw.exe is required.'
+                throw 'Python 3.11+ with pyw.exe or pythonw.exe is required.'
             }
             $python = $command.Source
         }

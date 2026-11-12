@@ -7,7 +7,7 @@ A lightweight Python + HTML/CSS/JavaScript assistant for Azure DevOps work items
 - Read Azure DevOps test case details through Test Planner using a Personal Access Token (PAT).
 - Work Items / Test Case supports ID/title search, one selected case, and Details, Automation, and execution History tabs.
 - Show page shells for Objective, Post Development Bug, User Story, Feature, and Task under Work Items.
-- Chat through a backend AI service using a GitHub token or another OpenAI-compatible AI endpoint.
+- Chat through GitHub Copilot using a session-only GitHub PAT, account-provided models, conversation history, and optional ADO work-item attachments.
 - Test Results workspace with Summary, Test Planner, Result Tracker, and Charts.
 - Test Planner can select ADO test cases and generate Visual Studio UFT `.playlist` files directly in the web app.
 - Result Tracker supports editable result grids, JSON save/open, Excel export, ADO Test Run publishing, and optional OTE workbook transfer.
@@ -133,26 +133,30 @@ ADO PAT
 
 The PAT field is blank by default and the PAT is never returned to the frontend. `Connect to ADO` stays disabled until organization, project, and PAT are all filled. Clicking it persists only the non-secret organization/project settings, tests the connection, and keeps the PAT only in backend process memory for the current app session. While ADO is being checked, the header shows an animated `Connecting to ADO…` indicator; the connection request times out after 30 seconds. On success the header shows `ADO connected`, the PAT field is cleared, and the button becomes disabled again. After the backend process terminates, the PAT is gone; the next launch starts as `ADO not connected` and requires the PAT again. Legacy `ADO_PAT` entries are removed from `backend/.env` at backend startup.
 
-AI settings remain backend environment configuration for now and are not exposed on the Setup page.
+### Activate the AI Assistant
 
-You can also create `.env` manually if preferred:
+Python **3.11+** is required. Relaunch after pulling the changes; the launcher installs the pinned `github-copilot-sdk` dependency automatically. If an existing `backend/.venv` uses Python 3.10, recreate it with Python 3.11+ before relaunching.
 
-```powershell
-Copy-Item .env.example .env
-```
+1. In **Setup → AI Assistant · GitHub Copilot**, enter a fine-grained GitHub PAT with **Copilot Requests** permission. The account needs Copilot access; classic PATs are not supported. This is separate from the ADO PAT.
+2. Click **Connect to Copilot**. The first connection automatically downloads the SDK's pinned runtime; allow network access to GitHub releases. A progress indicator stays visible while connecting. No separate Copilot CLI or Node.js installation is needed for this SDK runtime.
+3. Open the floating **AI** button. Choose a model returned by your account. A Luna model is selected initially when available; otherwise the first available model is selected.
+4. Ask a question, or enter up to 20 comma/space-separated work-item IDs to attach their current ADO fields. Attachments require an active ADO connection. Only explicitly attached items are sent to Copilot.
+5. Continue with follow-up questions. The last 20 messages are retained in browser memory, and **New chat** clears the conversation and attachments. A browser refresh clears the conversation. **Disconnect AI** removes the backend's PAT; terminating the backend also removes it.
+
+The assistant analyzes and drafts content for review. It has no shell, file, or ADO write tools. Copilot requests use your account's model access and usage allowance. The retired GitHub Models inference endpoint and old `AI_*` / `GITHUB_TOKEN` settings are no longer used by the assistant; remove legacy credentials from `.env` if present.
+
+Authentication reference: [Copilot SDK authentication](https://github.com/github/copilot-sdk/blob/main/docs/auth/authenticate.md).
+
+Non-secret ADO settings may still be configured in `backend/.env`:
 
 ```env
 ADO_ORGANIZATION=your-org
 ADO_PROJECT=your-project
-AI_PROVIDER=github
-AI_BASE_URL=https://models.github.ai/inference
-AI_MODEL=openai/gpt-4.1-mini
-GITHUB_TOKEN=your-github-token
 ```
 
 ## Security Rule
 
-Never put `ADO_PAT`, `GITHUB_TOKEN`, or other secrets in frontend files. The ADO PAT is session-only and must not be written to `.env`, JSON, browser storage, logs, or other persistent files. AI credentials remain backend environment configuration.
+Never put credentials in frontend source, browser storage, JSON exports, or logs. Both the ADO PAT and the Copilot PAT entered on Setup are kept in backend process memory only. Status endpoints never return them; password fields clear after successful connection. This app is intended for a local, single-user machine.
 
 ## Test Case browser
 

@@ -164,43 +164,6 @@ for (const input of [adoOrganizationInput, adoProjectInput, adoPatInput]) {
 }
 updateConnectAdoButtonState();
 
-const chatToggle = document.querySelector('#chatToggle');
-const chatbox = document.querySelector('#chatbox');
-const chatClose = document.querySelector('#chatClose');
-const chatMessages = document.querySelector('#chatMessages');
-const chatForm = document.querySelector('#chatForm');
-const chatInput = document.querySelector('#chatInput');
-
-chatToggle.addEventListener('click', () => chatbox.classList.toggle('hidden'));
-chatClose.addEventListener('click', () => chatbox.classList.add('hidden'));
-
-function addMessage(text, role) {
-  const node = document.createElement('div');
-  node.className = `message ${role}`;
-  node.textContent = text;
-  chatMessages.appendChild(node);
-  chatMessages.scrollTop = chatMessages.scrollHeight;
-}
-
-chatForm.addEventListener('submit', async (event) => {
-  event.preventDefault();
-  const message = chatInput.value.trim();
-  if (!message) return;
-  chatInput.value = '';
-  addMessage(message, 'user');
-  addMessage('Thinking...', 'ai');
-  const thinkingNode = chatMessages.lastElementChild;
-  try {
-    const data = await api('/api/chat', {
-      method: 'POST',
-      body: JSON.stringify({ message }),
-    });
-    thinkingNode.textContent = data.answer;
-  } catch (error) {
-    thinkingNode.textContent = error.message;
-  }
-});
-
 checkHealth();
 window.setInterval(checkHealth, 2000);
 checkSetup();

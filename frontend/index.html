@@ -56,6 +56,19 @@
         <button id="connectAdoButton" type="button" disabled>Connect to ADO</button>
       </div>
       <div id="setupError" class="setup-error" role="alert" aria-live="assertive" hidden></div>
+      <div class="ai-setup">
+        <div class="panel-heading-row"><h2>AI Assistant · GitHub Copilot</h2><span id="aiSetupStatus" class="mini-status" role="status">Not connected</span></div>
+        <p>Connect your Copilot account to ask questions and draft work-item content.</p>
+        <label for="copilotToken">GitHub PAT for Copilot</label>
+        <input id="copilotToken" type="password" autocomplete="off" placeholder="Enter your GitHub PAT" maxlength="4096">
+        <p class="ai-hint">Use a fine-grained PAT with Copilot Requests permission and an account with Copilot access. The PAT stays in memory until you disconnect or stop the app. First connection may take a few minutes to download the runtime.</p>
+        <div class="action-row">
+          <button id="connectAiButton" type="button" disabled>Connect to Copilot</button>
+          <button id="disconnectAiButton" type="button" class="secondary-button" disabled>Disconnect AI</button>
+        </div>
+        <div id="aiConnectProgress" class="tc-loading" role="progressbar" aria-label="Connecting to Copilot" hidden><span></span></div>
+        <p id="aiSetupError" class="setup-error" role="alert" hidden></p>
+      </div>
     </section>
 
     <section class="panel test-plan-panel" aria-label="Test Results">
@@ -334,22 +347,32 @@
     </section>
   </main>
 
-  <button id="chatToggle" class="chat-toggle">AI</button>
+  <button id="chatToggle" type="button" class="chat-toggle" aria-label="Open AI assistant" aria-controls="chatbox" aria-expanded="false">AI</button>
   <aside id="chatbox" class="chatbox hidden" aria-label="Floating AI chatbox">
     <header>
       <strong>AI Assistant</strong>
-      <button id="chatClose" aria-label="Close chat">x</button>
+      <div><button id="chatNew" type="button">New chat</button><button id="chatClose" type="button" aria-label="Close chat">×</button></div>
     </header>
-    <div id="chatMessages" class="chat-messages"></div>
+    <div class="chat-options">
+      <p id="chatStatus" role="status" aria-live="polite">Connect to Copilot in Setup to start.</p>
+      <button id="chatSetup" type="button" class="secondary-button">Open AI setup</button>
+      <label for="chatModel">Copilot model</label><select id="chatModel" disabled></select>
+      <label for="chatContextIds">Attach ADO work-item IDs (optional)</label>
+      <input id="chatContextIds" type="text" placeholder="e.g. 179328, 196268" aria-describedby="chatContextHint">
+      <p id="chatContextHint" class="ai-hint">Only attached items are read from ADO and sent to Copilot. Connect to ADO first to include them.</p>
+    </div>
+    <div id="chatMessages" class="chat-messages" role="log" aria-live="polite"><p class="ai-hint">Ask a question, summarize attached work items, or draft test steps and comments.</p></div>
     <form id="chatForm" class="chat-form">
-      <input id="chatInput" type="text" placeholder="Ask about ADO work items">
-      <button type="submit">Send</button>
+      <label class="visually-hidden" for="chatInput">Your question</label>
+      <input id="chatInput" type="text" maxlength="16000" placeholder="Ask about ADO work items" disabled>
+      <button id="chatSend" type="submit" disabled>Send</button>
     </form>
   </aside>
 
   <script src="main-tabs.js"></script>
   <script src="repo-history.js"></script>
   <script src="app.js"></script>
+  <script src="assistant.js"></script>
   <script src="test-case-browser.js"></script>
   <script src="export-results.js"></script>
   <script src="test-assignment-workbook.js"></script>
