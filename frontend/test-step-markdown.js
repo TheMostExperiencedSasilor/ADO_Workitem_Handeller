@@ -94,8 +94,8 @@ const testStepMarkdown = (() => {
 
   function escapeCell(value) {
     return String(value)
-      .replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
-      .replace(/[\\|*_`~\[\]]/g, '\\$&')
+      .replaceAll('&', '&amp;')
+      .replace(/[\\|*_`~\[\]<>]/g, '\\$&')
       .replace(/\r\n?|\n/g, '<br>');
   }
 
