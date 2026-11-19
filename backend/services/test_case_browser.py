@@ -228,9 +228,39 @@ class TestCaseBrowser:
             metadata_warning = "Some field labels are derived from their reference names because ADO field labels could not be loaded."
         entries = [{"referenceName": key, "name": names.get(key) or re.sub(r"(?<=[a-z])(?=[A-Z])", " ", key.split(".")[-1]),
                     "value": value} for key, value in fields.items()]
+        steps, steps_warning = self._detail_steps(fields.get("Microsoft.VSTS.TCM.Steps", ""))
         return {"id": case_id, "title": fields.get("System.Title", ""), "fields": entries,
-                "steps": parse_steps(fields.get("Microsoft.VSTS.TCM.Steps", "")),
+                "steps": steps, "stepsWarning": steps_warning,
                 "url": f"{self.client.base_url}/_workitems/edit/{case_id}", "warning": metadata_warning}
+
+    def _detail_steps(self, xml):
+        shared_steps = {}
+        incomplete = False
+
+        def mark_incomplete():
+            nonlocal incomplete
+            incomplete = True
+
+        def read_shared(reference):
+            if reference not in shared_steps:
+                try:
+                    items = self.client.read_work_items([reference])
+                except requests.RequestException:
+                    items = []
+                project = unquote(self.client.config.ado_project).casefold()
+                for item in items:
+                    fields = item.get("fields") or {}
+                    if (str(item.get("id")) == str(reference) and fields.get("System.WorkItemType") == "Shared Steps"
+                            and fields.get("System.TeamProject", "").casefold() == project):
+                        shared_steps[reference] = fields.get("Microsoft.VSTS.TCM.Steps", "")
+                        break
+                else:
+                    shared_steps[reference] = ""
+            return shared_steps[reference]
+
+        rows = parse_steps(xml, read_shared, mark_incomplete)
+        warning = "Some steps could not be loaded. Open the test case in ADO to review the missing steps." if incomplete else ""
+        return rows, warning
 
     def history(self, case_id, skip=0, page_size=50):
         # Query actual results, including manual runs, rather than current point status.
@@ -276,18 +306,40 @@ def reference_id(value):
         return None
 
 
-def parse_steps(xml):
+def parse_steps(xml, read_shared=None, mark_incomplete=lambda: None):
     if not xml:
         return []
-    try:
-        root = ElementTree.fromstring(xml)
-        steps = []
-        for child in root:
+
+    def parse(value, prefix="", active=()):
+        root = ElementTree.fromstring(value)
+        entries = [child for child in root if child.tag in ("step", "compref")]
+        rows = []
+        for index, child in enumerate(entries, 1):
+            number = f"{prefix}{index}"
             if child.tag == "step":
                 parts = child.findall("parameterizedString")
-                steps.append({"action": parts[0].text or "" if parts else "", "expected": parts[1].text or "" if len(parts) > 1 else ""})
-            elif child.tag == "compref":
-                steps.append({"action": f"Shared steps: #{child.get('ref', '')} (open in ADO to view)", "expected": ""})
-        return steps
+                action, expected = ([(part.text or "") for part in parts[:2]] + ["", ""])[:2]
+                rows.append({"number": number, "action": action, "expected": expected})
+                continue
+
+            reference = child.get("ref", "")
+            resolved = []
+            if read_shared and len(active) < 12:
+                try:
+                    shared_id = positive_id(reference)
+                    if shared_id not in active and (shared_xml := read_shared(shared_id)):
+                        resolved = parse(shared_xml, f"{number}.", (*active, shared_id))
+                except (ValueError, ElementTree.ParseError):
+                    pass
+            if resolved:
+                rows.extend(resolved)
+            else:
+                mark_incomplete()
+                rows.append({"number": number, "action": f"Shared steps: #{reference} (open in ADO to view)", "expected": ""})
+        return rows
+
+    try:
+        return parse(xml)
     except ElementTree.ParseError:
-        return [{"action": "Steps could not be parsed. Open this test case in ADO to view them.", "expected": ""}]
+        mark_incomplete()
+        return [{"number": "1", "action": "Steps could not be parsed. Open this test case in ADO to view them.", "expected": ""}]

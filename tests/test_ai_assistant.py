@@ -163,3 +163,103 @@ def test_sdk_authentication_and_empty_models(sdk):
     with pytest.raises(AiServiceError) as exc:
         AiClient('invalid').list_models()
     assert exc.value.status == 403
+
+
+REWRITE_PATH = '/api/chat/rewrite-test-steps'
+SOURCE_STEPS = [
+    {'step': '1', 'action': 'Load LNG Plant Simulation.hsc and open <E-100>.', 'expected': 'Pressure is 250 kPa.'},
+    {'step': '2.1', 'action': 'Open the Performance page.', 'expected': ''},
+]
+REWRITTEN_STEPS = [
+    {'step': '1', 'action': 'Open HYSYS and load LNG Plant Simulation.hsc. Select <E-100>.',
+     'expected': 'Verify the pressure is 250 kPa.'},
+    {'step': '2.1', 'action': 'Navigate to Performance.',
+     'expected': 'Not specified in the original test case; requires clarification.'},
+]
+
+
+def post_rewrite(browser, steps=SOURCE_STEPS, model='test-model'):
+    return browser.post(REWRITE_PATH, json={'model': model, 'steps': steps})
+
+
+def test_rewrite_uses_existing_session_and_no_ado_access(browser, monkeypatch, sdk):
+    client, session = sdk
+    connect(browser, monkeypatch)
+    monkeypatch.setattr(routes, 'get_ado_client', Mock(side_effect=AssertionError('never access ADO')))
+    session.send_and_wait.return_value.data.content = ' ```json\n' + json.dumps(REWRITTEN_STEPS) + '\n``` '
+    response = post_rewrite(browser)
+    assert response.status_code == 200
+    assert response.json == {'steps': REWRITTEN_STEPS}
+    assert client.options['github_token'] == 'private-test-pat'
+    assert client.session_options['model'] == 'test-model'
+    assert client.session_options['available_tools'] == []
+    instructions = client.session_options['system_message']['content']
+    assert 'untrusted source text' in instructions
+    assert 'Do not invent expected values' in instructions
+    assert json.loads(session.send_and_wait.await_args.args[0]) == {'steps': SOURCE_STEPS}
+    client.delete_session.assert_awaited_once_with('temporary-session')
+    routes.get_ado_client.assert_not_called()
+    assert 'private-test-pat' not in response.text
+
+
+def test_rewrite_unavailable_or_unknown_model(browser, monkeypatch):
+    rewrite = Mock()
+    monkeypatch.setattr(AiClient, 'rewrite_test_steps', rewrite)
+    assert 'not connected' in post_rewrite(browser).json['error']
+    connect(browser, monkeypatch)
+    assert 'available Copilot model' in post_rewrite(browser, model='unavailable').json['error']
+    rewrite.assert_not_called()
+
+
+@pytest.mark.parametrize('steps', [
+    None, [], [{'step': '1', 'action': None, 'expected': ''}], [SOURCE_STEPS[0]] * 2,
+    [{'step': '1', 'action': 'a' * 64_001, 'expected': ''}],
+])
+def test_rewrite_rejects_invalid_source_rows(browser, monkeypatch, steps):
+    connect(browser, monkeypatch)
+    rewrite = Mock()
+    monkeypatch.setattr(AiClient, 'rewrite_test_steps', rewrite)
+    assert post_rewrite(browser, steps).status_code == 400
+    rewrite.assert_not_called()
+
+
+@pytest.mark.parametrize('answer,error', [
+    ('  ', 'no steps'), ('not JSON', 'invalid JSON'), ('{}', 'one row'),
+    (json.dumps(REWRITTEN_STEPS[:1]), 'one row'),
+    (json.dumps(REWRITTEN_STEPS[::-1]), 'structure or order'),
+    (json.dumps([{**REWRITTEN_STEPS[0], 'suggestion': 'extra'}, REWRITTEN_STEPS[1]]), 'structure or order'),
+    (json.dumps([{**REWRITTEN_STEPS[0], 'expected': ' '}, REWRITTEN_STEPS[1]]), 'incomplete text'),
+    (json.dumps(REWRITTEN_STEPS).replace('E-100', 'E-101'), 'technical identifier'),
+    (json.dumps(REWRITTEN_STEPS).replace('Simulation.hsc', 'Different.hsc'), 'technical identifier'),
+    (json.dumps(REWRITTEN_STEPS).replace('LNG Plant', 'LNG Factory'), 'technical identifier'),
+    (json.dumps(REWRITTEN_STEPS).replace('250 kPa', '251 kPa'), 'numeric data'),
+    (json.dumps(REWRITTEN_STEPS).replace('250 kPa', '250 bar'), 'numeric data'),
+])
+def test_rewrite_validates_response_and_allows_retry(browser, monkeypatch, answer, error):
+    connect(browser, monkeypatch)
+    monkeypatch.setattr(AiClient, 'rewrite_test_steps', Mock(side_effect=[answer, json.dumps(REWRITTEN_STEPS)]))
+    result = post_rewrite(browser)
+    assert result.status_code == 502
+    assert error in result.json['error']
+    assert 'steps' not in result.json
+    assert post_rewrite(browser).json == {'steps': REWRITTEN_STEPS}
+
+
+def test_rewrite_timeout_releases_lock_and_duplicate_is_rejected(browser, monkeypatch, sdk):
+    _, session = sdk
+    connect(browser, monkeypatch)
+    async def initial_timeout(*args, **kwargs):
+        with create_app().test_client() as second:
+            duplicate = post_rewrite(second)
+            assert duplicate.status_code == 409
+            assert 'already running' in duplicate.json['error']
+        raise TimeoutError('upstream timeout with a private-test-pat')
+    session.send_and_wait.side_effect = initial_timeout
+    failed = post_rewrite(browser)
+    assert failed.status_code == 504
+    assert 'timed out' in failed.json['error']
+    assert 'private-test-pat' not in failed.text
+    session.send_and_wait.side_effect = None
+    session.send_and_wait.return_value.data.content = json.dumps(REWRITTEN_STEPS)
+    assert post_rewrite(browser).status_code == 200
+    assert session.send_and_wait.await_count == 2

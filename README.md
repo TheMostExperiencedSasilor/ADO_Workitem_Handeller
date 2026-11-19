@@ -166,7 +166,11 @@ Connect to ADO on Setup, then open **Work Items → Test Case**. Search is scope
 - **Flexible match by ID**: starting digits, ignoring spaces. `12 34` finds `1234`, `12345`, `123456`, etc.
 - **Flexible match by title**: phrase at the start first, phrase elsewhere second, then words appearing separately in the same order. `HYSYS MCP` ranks `HYSYS MCP cooler`, `Review HYSYS MCP cooler`, then `HYSYS cooler MCP validation`. Results are ranked before display pagination; IDs break ties.
 
-Select one radio button to load a case. Details shows description, preconditions, action/expected steps, planning fields, and classification. Automation shows the fields recorded in the organization's process, with ADO field display names. Shared steps are identified by ID and can be opened through the case's **Open in ADO** link. This initial browser is read-only.
+Select one radio button to load a case. Details shows description, preconditions, action/expected steps, planning fields, and classification. Automation shows the fields recorded in the organization's process, with ADO field display names. Accessible shared steps from the connected project appear in place, with numbers such as `2.1`. Unavailable references are identified by ID and can be reviewed through the case's **Open in ADO** link.
+
+Hover over a step or Tab to its copy icon to copy that row as Markdown. **Copy All Steps** opens an editable Markdown table containing the full procedure. **Copy** uses the active draft, including your edits. **Reset** restores the generated text for that version after confirmation.
+
+With Copilot connected in Setup, **AI-modification** uses the model selected in the AI assistant. It rewrites the source steps for automation preparation and flags missing acceptance criteria. The original and AI-modified drafts are independently editable. Review the draft against the source before using it. This workflow reads Azure DevOps and keeps drafts in the open dialog.
 
 **History** loads execution results on demand using the Azure DevOps Test Results query API (`7.1-preview.2`), without an application date cutoff. It continues fetching older results in 50-row batches in the background. The table stays usable while results arrive, and the counts identify partial loading. Failed-result filters therefore reach older executions rather than stopping at the first batch. An interrupted load keeps existing rows and offers **Retry loading**; **Refresh history** starts again.
 
@@ -178,7 +182,7 @@ Click **Logged Date and time** in the History header to open the mini-calendar. 
 
 Search/details need Work Items read access. History also needs Test Management access; the documented preview query endpoint lists the `vso.test_write` scope. A denied or unavailable history endpoint displays an error with retry; it is not presented as an empty history. No ADO work items or results are changed.
 
-Focused checks: `python -m pytest -q tests/test_test_case_browser.py` and `node --test tests/test_test_case_browser_frontend.cjs`. API tests use mocked ADO responses; validate the preview history endpoint with a connected organization before relying on its production history.
+Focused checks: `python -m pytest -q tests/test_test_case_browser.py` and `node --test tests/test_test_case_browser_frontend.cjs`. For the browser copy workflow, install Playwright and its Chromium browser, then run `RUN_BROWSER_TESTS=1 node --test tests/test_test_step_copy_frontend.cjs`. API tests use mocked ADO responses; validate the preview history endpoint with a connected organization before relying on its production history.
 
 ### Recovering from a Test Case search 405 after an update
 

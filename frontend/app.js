@@ -298,24 +298,7 @@ document.querySelector('#testSuiteForm').addEventListener('submit', async (event
 async function copyTestSuite(failedOnly) {
   const markdown = testPointsMarkdown(visibleTestPoints, failedOnly);
   try {
-    if (navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(markdown);
-    } else {
-      // Support the existing app when opened over HTTP on a local network.
-      const field = document.createElement('textarea');
-      field.value = markdown;
-      field.style.position = 'fixed';
-      field.style.opacity = '0';
-      const previousFocus = document.activeElement;
-      document.body.appendChild(field);
-      try {
-        field.select();
-        if (!document.execCommand('copy')) throw new Error('Copy unavailable');
-      } finally {
-        field.remove();
-        previousFocus?.focus();
-      }
-    }
+    await copyTextToClipboard(markdown);
     setTestSuiteStatus(failedOnly ? 'Failed cases copied as Markdown.' : 'Table copied as Markdown.');
   } catch {
     setTestSuiteStatus('Could not copy. Allow clipboard access or open the app on localhost/HTTPS and try again.', true);
