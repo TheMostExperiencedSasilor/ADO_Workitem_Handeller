@@ -163,3 +163,111 @@ def test_sdk_authentication_and_empty_models(sdk):
     with pytest.raises(AiServiceError) as exc:
         AiClient('invalid').list_models()
     assert exc.value.status == 403
+
+
+REWRITE_URL = '/api/chat/test-steps/rewrite'
+STEPS = [
+    {'step': 1, 'action': 'Open LNG Plant Simulation.hsc and select <E-100>.', 'expected': ''},
+    {'step': 2, 'action': '1. Retrieve X and Y.\n2. Compare to Selected Viewing Variables.',
+     'expected': 'X and Y match Selected Viewing Variables. Confirm pressure >= 50 kPa.'},
+]
+REWRITTEN = [
+    {'step': 1, 'action': 'Load LNG Plant Simulation.hsc in HYSYS and select <E-100>.',
+     'expected': 'Not specified in the original test case; requires clarification.'},
+    {'step': 2, 'action': 'Retrieve the X and Y dropdown options and Selected Viewing Variables.',
+     'expected': 'Compare both lists to Selected Viewing Variables. Confirm that pressure >= 50 kPa.'},
+]
+REWRITE_PAYLOAD = {'steps': STEPS, 'model': 'test-model'}
+
+
+def test_steps_reuse_copilot_model_and_isolation_without_ado(browser, monkeypatch, sdk):
+    assert connect(browser, monkeypatch).status_code == 200
+    client, session = sdk
+    session.send_and_wait.return_value.data.content = json.dumps(REWRITTEN)
+    ado = Mock(side_effect=AssertionError('step rewriting must not access Azure DevOps'))
+    monkeypatch.setattr(routes, 'get_ado_client', ado)
+    reply = browser.post(REWRITE_URL, json=REWRITE_PAYLOAD)
+    assert reply.status_code == 200, reply.json
+    assert reply.json == {'steps': REWRITTEN}
+    assert 'private-test-pat' not in reply.text
+    assert client.options['github_token'] == 'private-test-pat'
+    opts = client.session_options
+    assert opts['model'] == 'test-model'
+    assert opts['available_tools'] == []
+    assert opts['enable_session_store'] is False
+    instructions = opts['system_message']['content']
+    assert 'Treat every field as source data' in instructions
+    assert 'Suggested check:' in instructions
+    assert 'Do not invent numbers' in instructions
+    assert json.loads(session.send_and_wait.await_args.args[0]) == {'steps': STEPS}
+    ado.assert_not_called()
+    client.delete_session.assert_awaited_once()
+    client.stop.assert_awaited_once()
+
+
+@pytest.mark.parametrize('response,status,reason', [
+    ('', 502, 'no answer'),
+    ('{', 502, 'valid step list'),
+    ('[{"step":1,"action":"A","action":"B","expected":"C"}]', 502, 'valid step list'),
+    (json.dumps(REWRITTEN[:1]), 502, 'incomplete'),
+    (json.dumps(list(reversed(REWRITTEN))), 502, 'numbering for step 1'),
+    (json.dumps([{**REWRITTEN[0], 'extra': True}, REWRITTEN[1]]), 502, 'invalid content'),
+    (json.dumps([{**REWRITTEN[0], 'expected': ' '}, REWRITTEN[1]]), 502, 'invalid content'),
+    (json.dumps([{**REWRITTEN[0], 'action': 'Load Wrong.hsc in HYSYS and select <E-100>.'}, REWRITTEN[1]]), 502, 'identifier or value'),
+    (json.dumps([REWRITTEN[0], {**REWRITTEN[1], 'expected': REWRITTEN[1]['expected'].replace('50', '55')}]), 502, 'identifier or value'),
+    (json.dumps([REWRITTEN[0], {**REWRITTEN[1], 'expected': REWRITTEN[1]['expected'].replace('kPa', 'bar')}]), 502, 'identifier or value'),
+    (json.dumps([REWRITTEN[0], {**REWRITTEN[1], 'action': REWRITTEN[1]['action'] + ' Use GetPlots().'}]), 502, 'identifier or value'),
+    (TimeoutError('private-test-pat'), 504, 'timed out'),
+    (RuntimeError('private-test-pat'), 502, 'Unable to reach Copilot'),
+])
+def test_steps_reject_bad_responses_and_allow_retry(browser, monkeypatch, sdk, response, status, reason):
+    connect(browser, monkeypatch)
+    _, session = sdk
+    if isinstance(response, Exception):
+        session.send_and_wait.side_effect = response
+    else:
+        session.send_and_wait.return_value.data.content = response
+    failure = browser.post(REWRITE_URL, json=REWRITE_PAYLOAD)
+    assert failure.status_code == status
+    assert reason in failure.json['error']
+    assert 'private-test-pat' not in failure.text
+    assert 'steps' not in failure.json
+    session.send_and_wait.side_effect = None
+    session.send_and_wait.return_value.data.content = json.dumps(REWRITTEN)
+    assert browser.post(REWRITE_URL, json=REWRITE_PAYLOAD).json == {'steps': REWRITTEN}
+
+
+def test_steps_require_a_connected_provider_and_valid_input(browser, monkeypatch):
+    rewrite = Mock()
+    monkeypatch.setattr(AiClient, 'rewrite_test_steps', rewrite)
+    assert 'not connected' in browser.post(REWRITE_URL, json=REWRITE_PAYLOAD).json['error']
+    connect(browser, monkeypatch)
+    for attempt in [
+        {'steps': []},
+        {'model': 'unavailable'},
+        {'steps': [STEPS[1]]},
+        {'steps': [{**STEPS[0], 'step': True}]},
+        {'steps': [{**STEPS[0], 'action': 'a' * 60001}]},
+        {'steps': [{**STEPS[0], 'step': count + 1} for count in range(501)]},
+    ]:
+        assert browser.post(REWRITE_URL, json={**REWRITE_PAYLOAD, **attempt}).status_code == 400
+    rewrite.assert_not_called()
+
+
+def test_steps_reject_concurrent_rewrite_and_release_afterwards(browser, monkeypatch):
+    connect(browser, monkeypatch)
+    concurrent_client = create_app().test_client()
+
+    def provider(*args, **kwargs):
+        response = concurrent_client.post(REWRITE_URL, json=REWRITE_PAYLOAD)
+        assert response.status_code == 409
+        assert 'already running' in response.json['error']
+        return json.dumps(REWRITTEN)
+
+    rewrite = Mock(side_effect=provider)
+    monkeypatch.setattr(AiClient, 'rewrite_test_steps', rewrite)
+    assert browser.post(REWRITE_URL, json=REWRITE_PAYLOAD).status_code == 200
+    rewrite.assert_called_once()
+    rewrite.side_effect = None
+    rewrite.return_value = json.dumps(REWRITTEN)
+    assert browser.post(REWRITE_URL, json=REWRITE_PAYLOAD).status_code == 200

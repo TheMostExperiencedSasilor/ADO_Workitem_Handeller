@@ -100,3 +100,99 @@
 .tc-calendar-actions { display: flex; justify-content: space-between; gap: 12px; }
 .tc-calendar-actions button { padding: 7px 11px; font-size: 13px; }
 #tcCalendarClear { color: var(--accent); background: #edf4ff; }
+
+.tc-steps-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+.tc-steps-heading h4 { border: 0; padding: 0; margin: 0; }
+.tc-steps-heading button { margin: 0; }
+.tc-steps-feedback { margin: 0; }
+.tc-steps-feedback:not(:empty) {
+  position: fixed;
+  z-index: 20;
+  bottom: 16px;
+  left: 16px;
+  max-width: min(390px, calc(100vw - 32px));
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 4px 14px #17203326;
+  padding: 8px 12px;
+  font-size: 13px;
+}
+.tc-step-number { display: flex; align-items: center; justify-content: space-between; gap: 6px; min-height: 26px; }
+.tc-step-copy-icon, #tcStepCopyClose {
+  display: inline-grid;
+  place-items: center;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--accent-dark);
+  margin: 0;
+  padding: 5px;
+}
+.tc-step-copy-icon { opacity: 0; pointer-events: none; }
+.tc-steps tr:hover .tc-step-copy-icon,
+.tc-step-copy-icon:focus-visible { opacity: 1; pointer-events: auto; }
+.tc-step-copy-icon:hover, #tcStepCopyClose:hover { background: #edf4ff; }
+.tc-step-copy-icon:focus-visible, .tc-step-dialog :focus-visible, .tc-steps-heading button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.tc-step-dialog {
+  box-sizing: border-box;
+  width: min(75vw, 1100px);
+  max-width: calc(100vw - 24px);
+  max-height: 80vh;
+  overflow: auto;
+  padding: 0;
+  color: var(--text);
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 14px 48px #17203338;
+}
+.tc-step-dialog::backdrop { background: #17203366; }
+.tc-step-dialog-layout { display: flex; flex-direction: column; gap: 12px; padding: 18px 20px; }
+.tc-step-dialog-header, .tc-step-dialog-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  gap: 12px;
+}
+.tc-step-dialog-header h3 { margin: 0; }
+.tc-step-dialog-header p { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
+.tc-step-dialog-toolbar, .tc-step-dialog-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.tc-step-dialog button { margin: 0; }
+.tc-step-dialog-toolbar button {
+  color: var(--accent-dark);
+  background: #f1f5fb;
+  padding: 7px 12px;
+}
+.tc-step-dialog-toolbar button[aria-pressed="true"] { background: var(--accent); color: white; }
+.tc-step-dialog [aria-disabled="true"] { opacity: .5; cursor: not-allowed; }
+#tcStepCopyWarning { margin: 0; font-size: 13px; }
+#tcStepCopyText {
+  box-sizing: border-box;
+  width: 100%;
+  height: 44vh;
+  min-height: 7rem;
+  margin: 0;
+  resize: none;
+  overflow: auto;
+  font: 13px/1.55 ui-monospace, Consolas, monospace;
+}
+#tcStepCopyProgress { margin: 0; }
+.tc-step-dialog-footer { border-top: 1px solid var(--border); padding-top: 12px; align-items: center; flex-wrap: wrap; }
+#tcStepCopyStatus { flex: 1 1 210px; margin: 0; min-height: 1.4em; font-size: 13px; }
+.tc-step-dialog-actions { margin-left: auto; }
+@media (max-width: 700px) {
+  .tc-step-dialog { width: calc(100vw - 24px); }
+  .tc-step-dialog-layout { padding: 14px; }
+  #tcStepCopyText { height: 36vh; }
+}

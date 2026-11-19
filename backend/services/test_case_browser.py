@@ -1,5 +1,6 @@
 """Read-only Test Case search and execution history against Azure DevOps."""
 import re
+from html import escape
 from urllib.parse import unquote, urlparse
 from xml.etree import ElementTree
 
@@ -228,9 +229,19 @@ class TestCaseBrowser:
             metadata_warning = "Some field labels are derived from their reference names because ADO field labels could not be loaded."
         entries = [{"referenceName": key, "name": names.get(key) or re.sub(r"(?<=[a-z])(?=[A-Z])", " ", key.split(".")[-1]),
                     "value": value} for key, value in fields.items()]
+        steps = parse_steps(fields.get("Microsoft.VSTS.TCM.Steps", ""), self._shared_steps)
         return {"id": case_id, "title": fields.get("System.Title", ""), "fields": entries,
-                "steps": parse_steps(fields.get("Microsoft.VSTS.TCM.Steps", "")),
+                "steps": steps,
                 "url": f"{self.client.base_url}/_workitems/edit/{case_id}", "warning": metadata_warning}
+
+    def _shared_steps(self, shared_id):
+        items = self.client.read_work_items([shared_id])
+        for item in items:
+            fields = item.get("fields", {})
+            if (str(item.get("id")) == str(shared_id) and fields.get("System.WorkItemType") == "Shared Steps"
+                    and fields.get("System.TeamProject", "").casefold() == unquote(self.client.config.ado_project).casefold()):
+                return fields.get("Microsoft.VSTS.TCM.Steps")
+        return None
 
     def history(self, case_id, skip=0, page_size=50):
         # Query actual results, including manual runs, rather than current point status.
@@ -276,18 +287,59 @@ def reference_id(value):
         return None
 
 
-def parse_steps(xml):
+def _step_cell(part):
+    if part.get("isformatted", "").lower() == "false":
+        return escape("".join(part.itertext()), quote=False)
+    if not len(part):
+        return part.text or ""
+    # Azure DevOps can return either escaped HTML or inline XML markup.
+    return escape(part.text or "", quote=False) + "".join(
+        ElementTree.tostring(child, encoding="unicode") for child in part
+    )
+
+
+def parse_steps(xml, read_shared=None):
     if not xml:
         return []
+
+    def unavailable(action):
+        return {"action": action, "expected": "", "unavailable": True}
+
+    shared_roots = {}
+
+    def read_group(group, ancestors=()):
+        for child in group:
+            if child.tag == "step":
+                parts = [_step_cell(part) for part in child.findall("parameterizedString")[:2]]
+                action, expected = (parts + ["", ""])[:2]
+                yield {"action": action, "expected": expected}
+            elif child.tag == "compref":
+                if any(part.tag in ("step", "compref") for part in child):
+                    yield from read_group(child, ancestors)
+                    continue
+                ref = child.get("ref", "")
+                try:
+                    shared_id = positive_id(ref)
+                    if shared_id in ancestors:
+                        raise ValueError("Circular shared steps reference.")
+                    if shared_id not in shared_roots:
+                        shared_roots[shared_id] = None
+                        shared_xml = read_shared(shared_id) if read_shared else None
+                        if shared_xml:
+                            shared_roots[shared_id] = ElementTree.fromstring(shared_xml)
+                    root = shared_roots[shared_id]
+                    if root is not None and root.tag == "steps" and len(root):
+                        yield from read_group(root, (*ancestors, shared_id))
+                        continue
+                except (ValueError, ElementTree.ParseError, requests.RequestException):
+                    pass
+                label = f" #{ref}" if re.fullmatch(r"[0-9]{1,10}", ref) else ""
+                yield unavailable(f"Shared steps{label} could not be loaded. Open in ADO to view them.")
+
     try:
         root = ElementTree.fromstring(xml)
-        steps = []
-        for child in root:
-            if child.tag == "step":
-                parts = child.findall("parameterizedString")
-                steps.append({"action": parts[0].text or "" if parts else "", "expected": parts[1].text or "" if len(parts) > 1 else ""})
-            elif child.tag == "compref":
-                steps.append({"action": f"Shared steps: #{child.get('ref', '')} (open in ADO to view)", "expected": ""})
-        return steps
+        if root.tag == "steps":
+            return list(read_group(root))
     except ElementTree.ParseError:
-        return [{"action": "Steps could not be parsed. Open this test case in ADO to view them.", "expected": ""}]
+        pass
+    return [unavailable("Steps could not be parsed. Open this test case in ADO to view them.")]

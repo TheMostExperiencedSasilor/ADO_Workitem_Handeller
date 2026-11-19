@@ -172,16 +172,54 @@
     const preconditions = find('PreConditions', 'Precondition', 'PreConditionsBlock');
     if (preconditions) consumed.add(preconditions.referenceName);
     section(main, 'Pre Conditions', rich(preconditions?.value));
-    const table = node('table', null, 'tc-table tc-steps');
-    const head = node('thead'); const headings = node('tr');
-    ['Step', 'Action', 'Expected result'].forEach((label) => headings.appendChild(node('th', label)));
-    head.appendChild(headings); table.appendChild(head);
-    const body = node('tbody');
-    data.steps.forEach((step, index) => { const row = node('tr'); row.appendChild(node('td', String(index + 1)));
-      for (const key of ['action', 'expected']) { const cell = node('td'); cell.appendChild(rich(step[key])); row.appendChild(cell); }
-      body.appendChild(row); });
-    table.appendChild(body); const wrap = node('div', null, 'tc-table-wrap'); wrap.appendChild(table);
-    section(main, 'Steps', data.steps.length ? wrap : node('p', 'No steps provided.'));
+    const steps = data.steps.map(testStepMarkdown.normalize);
+    const stepSection = node('section', null, 'tc-section');
+    const stepHeader = node('div', null, 'tc-steps-heading');
+    stepHeader.appendChild(node('h4', 'Steps'));
+    stepSection.appendChild(stepHeader);
+    if (steps.length) {
+      const copyAll = node('button', 'Copy All Steps', 'secondary-button');
+      copyAll.type = 'button';
+      copyAll.setAttribute('aria-haspopup', 'dialog');
+      copyAll.setAttribute('aria-controls', 'tcStepCopyDialog');
+      copyAll.addEventListener('click', () => testStepCopy.open(copyAll, steps, data.steps.some((step) => step.unavailable)));
+      stepHeader.appendChild(copyAll);
+      const feedback = node('p', '', 'tc-steps-feedback');
+      feedback.setAttribute('role', 'status');
+      stepSection.appendChild(feedback);
+      const table = node('table', null, 'tc-table tc-steps');
+      const head = node('thead'); const headings = node('tr');
+      ['Step', 'Action', 'Expected result'].forEach((label) => headings.appendChild(node('th', label)));
+      head.appendChild(headings); table.appendChild(head);
+      const body = node('tbody');
+      const copyButtons = [];
+      data.steps.forEach((step, index) => {
+        const row = node('tr');
+        const number = node('td');
+        const numberAndCopy = node('div', null, 'tc-step-number');
+        numberAndCopy.appendChild(node('span', String(steps[index].step)));
+        if (!step.unavailable) {
+          const button = testStepCopy.rowButton(steps[index], feedback);
+          numberAndCopy.appendChild(button);
+          copyButtons.push(button);
+        }
+        number.appendChild(numberAndCopy);
+        row.appendChild(number);
+        for (const key of ['action', 'expected']) {
+          const cell = node('td');
+          cell.appendChild(rich(testStepMarkdown.protectLiteralTags(step[key] ?? '')));
+          row.appendChild(cell);
+        }
+        body.appendChild(row);
+      });
+      table.appendChild(body);
+      const wrap = node('div', null, 'tc-table-wrap');
+      wrap.appendChild(table);
+      stepSection.appendChild(wrap);
+    } else {
+      stepSection.appendChild(node('p', 'No steps provided.'));
+    }
+    main.appendChild(stepSection);
     function fieldList(entries) {
       const list = node('dl', null, 'tc-field-list');
       entries.forEach((entry) => { const term = node('dt', entry.name); term.title = entry.referenceName;

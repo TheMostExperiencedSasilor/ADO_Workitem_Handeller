@@ -1,12 +1,15 @@
 import re
+from threading import Lock
 
 from flask import Blueprint, jsonify, request
 
 from services.ado_session import get_ado_client
 from services.ai_client import AiClient, AiServiceError
 from services.ai_session import ai_status, clear_ai_session, connect_ai_session, get_ai_session
+from services.test_step_rewrite import REWRITE_INSTRUCTIONS, read_source_steps, validate_rewrite
 
 chat_bp = Blueprint("chat", __name__, url_prefix="/api/chat")
+_rewrite_in_progress = Lock()
 
 
 @chat_bp.errorhandler(AiServiceError)
@@ -40,6 +43,28 @@ def disconnect():
     return jsonify(ai_status())
 
 
+def selected_model(payload, session):
+    model = payload.get("model")
+    if not isinstance(model, str) or model not in {m["id"] for m in session.models}:
+        raise ValueError("Select an available Copilot model.")
+    return model
+
+
+@chat_bp.post("/test-steps/rewrite")
+def rewrite_test_steps():
+    payload = payload_object()
+    steps = read_source_steps(payload.get("steps"))
+    current = get_ai_session()
+    model = selected_model(payload, current)
+    if not _rewrite_in_progress.acquire(blocking=False):
+        raise AiServiceError("A test-step rewrite is already running. Try again when it finishes.", 409)
+    try:
+        answer = AiClient(current.token).rewrite_test_steps(steps, model=model, instructions=REWRITE_INSTRUCTIONS)
+        return jsonify({"steps": validate_rewrite(answer, steps)})
+    finally:
+        _rewrite_in_progress.release()
+
+
 @chat_bp.post("")
 def chat():
     payload = payload_object()
@@ -59,9 +84,7 @@ def chat():
     ):
         raise ValueError("Conversation history must contain up to 20 user/assistant messages of at most 16000 characters each.")
     current = get_ai_session()
-    model = payload.get("model")
-    if not isinstance(model, str) or model not in {m["id"] for m in current.models}:
-        raise ValueError("Select an available Copilot model.")
+    model = selected_model(payload, current)
     history = [{"role": turn["role"], "content": turn["content"]} for turn in history]
     ids = list(dict.fromkeys(int(item) for item in ids))
     context = get_ado_client().read_work_items(ids) if ids else []
