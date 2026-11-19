@@ -183,31 +183,11 @@
     refreshPreview();
   });
 
-  async function copyToClipboard(text) {
-    if (navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(text);
-      return;
-    }
-    const field = document.createElement('textarea');
-    field.value = text;
-    field.style.position = 'fixed';
-    field.style.opacity = '0';
-    const previousFocus = document.activeElement;
-    document.body.appendChild(field);
-    try {
-      field.select();
-      if (!document.execCommand('copy')) throw new Error('Copy unavailable');
-    } finally {
-      field.remove();
-      previousFocus?.focus();
-    }
-  }
-
   confirmButton.addEventListener('click', async () => {
     const content = exportContent();
     if (!content) return;
     try {
-      await copyToClipboard(content);
+      await copyTextToClipboard(content, dialog);
       dialog.close();
       const status = document.querySelector('#testSuiteStatus');
       if (status) {

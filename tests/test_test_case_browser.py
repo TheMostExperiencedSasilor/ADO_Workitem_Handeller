@@ -89,10 +89,48 @@ def test_detail_uses_ado_field_names_and_steps(browser, monkeypatch):
     monkeypatch.setattr('services.test_case_browser.requests.get', Mock(return_value=response({'value': [
         {'referenceName': 'Custom.PreReq', 'name': 'Pre Conditions'}, {'referenceName': 'Custom.Tool', 'name': 'Automation Test Tool'}]})))
     detail = browser.detail(24143)
-    assert detail['steps'] == [{'action': '<b>Load</b>', 'expected': 'Loaded'}, {'action': 'Shared steps: #123 (open in ADO to view)', 'expected': ''}]
+    assert detail['steps'] == [
+        {'number': '1', 'action': '<b>Load</b>', 'expected': 'Loaded'},
+        {'number': '2', 'action': 'Shared steps: #123 (open in ADO to view)', 'expected': ''},
+    ]
+    assert 'Some steps could not be loaded' in detail['stepsWarning']
     assert next(f for f in detail['fields'] if f['referenceName'] == 'Custom.Tool')['name'] == 'Automation Test Tool'
     assert detail['url'] == 'https://dev.azure.com/org/QA%20Project/_workitems/edit/24143'
     assert not detail['warning']
+
+
+def test_shared_steps_expand_in_order_and_reuse_the_read(browser):
+    case = item(12)
+    shared = item(123, kind='Shared Steps')
+    case['fields']['Microsoft.VSTS.TCM.Steps'] = '''
+      <steps><step><parameterizedString>First</parameterizedString></step>
+        <compref ref="123"/><step><parameterizedString>Third</parameterizedString></step>
+        <compref ref="123"/></steps>
+    '''
+    shared['fields']['Microsoft.VSTS.TCM.Steps'] = '''
+      <steps><step><parameterizedString>Shared action</parameterizedString>
+        <parameterizedString>Shared result</parameterizedString></step>
+        <step><parameterizedString>Second shared action</parameterizedString></step></steps>
+    '''
+    browser.client.read_work_items = Mock(return_value=[shared])
+    steps, warning = browser._detail_steps(case['fields']['Microsoft.VSTS.TCM.Steps'])
+    assert [(row['number'], row['action'], row['expected']) for row in steps] == [
+        ('1', 'First', ''), ('2.1', 'Shared action', 'Shared result'), ('2.2', 'Second shared action', ''),
+        ('3', 'Third', ''), ('4.1', 'Shared action', 'Shared result'), ('4.2', 'Second shared action', ''),
+    ]
+    assert not warning
+    browser.client.read_work_items.assert_called_once_with([123])
+
+
+def test_unavailable_and_cyclic_shared_steps_are_reported(browser):
+    shared = item(123, kind='Shared Steps')
+    shared['fields']['Microsoft.VSTS.TCM.Steps'] = '<steps><compref ref="123"/></steps>'
+    other = item(234, kind='Shared Steps', project='Other Project')
+    browser.client.read_work_items = Mock(side_effect=[[shared], [other], requests.Timeout()])
+    steps, warning = browser._detail_steps('<steps><compref ref="123"/><compref ref="234"/><compref ref="456"/></steps>')
+    assert [row['number'] for row in steps] == ['1.1', '2', '3']
+    assert all('open in ADO to view' in row['action'] for row in steps)
+    assert warning
 
 
 @pytest.mark.parametrize('raw', [item(1, kind='Bug'), item(1, project='Other Project')])
