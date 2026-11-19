@@ -1,5 +1,6 @@
 """Read-only Test Case search and execution history against Azure DevOps."""
 import re
+from html import escape
 from urllib.parse import unquote, urlparse
 from xml.etree import ElementTree
 
@@ -251,7 +252,7 @@ class TestCaseBrowser:
                 for item in items:
                     fields = item.get("fields") or {}
                     if (str(item.get("id")) == str(reference) and fields.get("System.WorkItemType") == "Shared Steps"
-                            and fields.get("System.TeamProject", "").casefold() == project):
+                            and (fields.get("System.TeamProject") or "").casefold() == project):
                         shared_steps[reference] = fields.get("Microsoft.VSTS.TCM.Steps", "")
                         break
                 else:
@@ -306,40 +307,62 @@ def reference_id(value):
         return None
 
 
+def _step_cell(part):
+    if part.get("isformatted", "").lower() == "false":
+        return escape("".join(part.itertext()), quote=False)
+    if not len(part):
+        return part.text or ""
+    # ADO can store HTML as escaped text or as inline XML with tail text.
+    return escape(part.text or "", quote=False) + "".join(
+        ElementTree.tostring(child, encoding="unicode") for child in part
+    )
+
+
 def parse_steps(xml, read_shared=None, mark_incomplete=lambda: None):
     if not xml:
         return []
 
-    def parse(value, prefix="", active=()):
-        root = ElementTree.fromstring(value)
-        entries = [child for child in root if child.tag in ("step", "compref")]
+    def parse_group(group, prefix="", active=(), depth=0):
+        entries = [child for child in group if child.tag in ("step", "compref")]
         rows = []
         for index, child in enumerate(entries, 1):
             number = f"{prefix}{index}"
             if child.tag == "step":
                 parts = child.findall("parameterizedString")
-                action, expected = ([(part.text or "") for part in parts[:2]] + ["", ""])[:2]
+                action, expected = ([_step_cell(part) for part in parts[:2]] + ["", ""])[:2]
                 rows.append({"number": number, "action": action, "expected": expected})
                 continue
 
             reference = child.get("ref", "")
             resolved = []
-            if read_shared and len(active) < 12:
-                try:
-                    shared_id = positive_id(reference)
-                    if shared_id not in active and (shared_xml := read_shared(shared_id)):
-                        resolved = parse(shared_xml, f"{number}.", (*active, shared_id))
-                except (ValueError, ElementTree.ParseError):
-                    pass
+            if depth < 12:
+                # A reference can contain real steps or only the IDs used by the parent case.
+                inline = any(part.tag == "compref" or part.find("parameterizedString") is not None
+                             for part in child if part.tag in ("step", "compref"))
+                if inline:
+                    resolved = parse_group(child, f"{number}.", active, depth + 1)
+                elif read_shared:
+                    try:
+                        shared_id = positive_id(reference)
+                        if shared_id not in active and (shared_xml := read_shared(shared_id)):
+                            shared = ElementTree.fromstring(shared_xml)
+                            if shared.tag == "steps":
+                                resolved = parse_group(shared, f"{number}.", (*active, shared_id), depth + 1)
+                    except (ValueError, ElementTree.ParseError):
+                        pass
             if resolved:
                 rows.extend(resolved)
             else:
                 mark_incomplete()
-                rows.append({"number": number, "action": f"Shared steps: #{reference} (open in ADO to view)", "expected": ""})
+                label = f" #{reference}" if re.fullmatch(r"[0-9]{1,10}", reference) else ""
+                rows.append({"number": number, "action": f"Shared steps:{label} (open in ADO to view)", "expected": ""})
         return rows
 
     try:
-        return parse(xml)
+        root = ElementTree.fromstring(xml)
+        if root.tag == "steps":
+            return parse_group(root)
     except ElementTree.ParseError:
-        mark_incomplete()
-        return [{"number": "1", "action": "Steps could not be parsed. Open this test case in ADO to view them.", "expected": ""}]
+        pass
+    mark_incomplete()
+    return [{"number": "1", "action": "Steps could not be parsed. Open this test case in ADO to view them.", "expected": ""}]

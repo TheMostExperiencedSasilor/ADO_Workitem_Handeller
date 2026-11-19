@@ -43,6 +43,13 @@ def disconnect():
     return jsonify(ai_status())
 
 
+def selected_model(payload, session):
+    model = payload.get("model")
+    if not isinstance(model, str) or model not in {entry["id"] for entry in session.models}:
+        raise ValueError("Select an available Copilot model.")
+    return model
+
+
 @chat_bp.post("")
 def chat():
     payload = payload_object()
@@ -62,9 +69,7 @@ def chat():
     ):
         raise ValueError("Conversation history must contain up to 20 user/assistant messages of at most 16000 characters each.")
     current = get_ai_session()
-    model = payload.get("model")
-    if not isinstance(model, str) or model not in {m["id"] for m in current.models}:
-        raise ValueError("Select an available Copilot model.")
+    model = selected_model(payload, current)
     history = [{"role": turn["role"], "content": turn["content"]} for turn in history]
     ids = list(dict.fromkeys(int(item) for item in ids))
     context = get_ado_client().read_work_items(ids) if ids else []
@@ -77,9 +82,7 @@ def rewrite_test_steps():
     payload = payload_object()
     steps = read_rewrite_steps(payload.get("steps"))
     current = get_ai_session()
-    model = payload.get("model")
-    if not isinstance(model, str) or model not in {entry["id"] for entry in current.models}:
-        raise ValueError("Select an available Copilot model in the AI assistant.")
+    model = selected_model(payload, current)
     if not _rewrite_lock.acquire(blocking=False):
         raise AiServiceError("A test steps rewrite is already running. Wait for it to finish, then try again.", 409)
     try:

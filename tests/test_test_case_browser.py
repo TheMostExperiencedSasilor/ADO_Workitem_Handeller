@@ -268,3 +268,24 @@ def test_exact_point_supplies_missing_plan_with_recorded_suite_id(browser):
     assert row['testPlan'] == 'Recovered Plan (8)'
     assert row['testSuite'] == 'Recorded Suite (7)'
     browser._get.assert_not_called()
+
+
+def test_inline_xml_and_shared_step_ids_preserve_action_text_and_numbering():
+    read_shared = Mock(return_value='<steps><step><parameterizedString>Linked</parameterizedString></step></steps>')
+    incomplete = Mock()
+    result = parse_steps("""
+      <steps>
+        <step><parameterizedString>Open <B>HYSYS</B> now</parameterizedString></step>
+        <compref ref="2"><step><parameterizedString isformatted="false">&lt;b&gt; &amp;amp;</parameterizedString></step></compref>
+        <compref ref="3"><step id="8" /></compref>
+        <step><parameterizedString>Save</parameterizedString></step>
+      </steps>
+    """, read_shared, incomplete)
+    assert [(row['number'], row['action']) for row in result] == [
+        ('1', 'Open <B>HYSYS</B> now'), ('2.1', '&lt;b&gt; &amp;amp;'),
+        ('3.1', 'Linked'), ('4', 'Save'),
+    ]
+    read_shared.assert_called_once_with(3)
+    incomplete.assert_not_called()
+    assert parse_steps('<unrecognized/>', mark_incomplete=incomplete)[0]['action'].startswith('Steps could not be parsed')
+    incomplete.assert_called_once()

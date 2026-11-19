@@ -103,6 +103,12 @@
 
 .tc-step-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 10px; font-size: 13px; }
 .tc-step-toolbar button { margin: 0; }
+.tc-step-toolbar [role="status"]:not(:empty) {
+  position: fixed; z-index: 20; bottom: 16px; left: 16px;
+  max-width: min(390px, calc(100vw - 32px)); padding: 8px 12px;
+  border: 1px solid var(--border); border-radius: 6px;
+  background: var(--panel); box-shadow: var(--shadow); pointer-events: none;
+}
 .tc-step-toolbar [role="status"]:not(.tc-error) { color: var(--muted); }
 .tc-step-controls { display: flex; align-items: start; justify-content: space-between; gap: 4px; white-space: nowrap; }
 .tc-step-copy, .tc-copy-close {

@@ -31,14 +31,14 @@ const browserTest = (name, run) => test(name, { skip: !chromium && 'Enable real-
   const page = await context.newPage();
   const calls = [];
   const testCases = Array.from({ length: 12 }, (_, n) => ({ id: n + 1, title: `Test case ${n + 1}` }));
-  const steps = Array.from({ length: 125 }, (_, n) => ({
+  const steps = Array.from({ length: 550 }, (_, n) => ({
     number: String(n + 1), action: `Load case ${n + 1}.hsc`, expected: '',
   }));
   steps[0].action = '<p>Step 1: Open <LNG Section> &amp; Load Sample.hsc</p><p>Choose <b>Plots</b><br>Compare X | Y.</p>';
   steps[0].expected = '<div>Lists match<br>Keep A &lt; B.</div>';
   steps[1].number = '1.1';
   steps[1].action = '<ol><li><div>Inspect <Flow Rate></div></li><li>Use <sample.hsc>.</li></ol>';
-  const mocks = { steps, rewrite: (route) => route.fulfill({ json: { steps: [] } }) };
+  const mocks = { steps, stepsWarning: '', rewrite: (route) => route.fulfill({ json: { steps: [] } }) };
   await page.route('**/api/**', (route) => {
     const request = route.request();
     const url = new URL(request.url()).pathname;
@@ -50,7 +50,7 @@ const browserTest = (name, run) => test(name, { skip: !chromium && 'Enable real-
     if (url.endsWith('/search')) return route.fulfill({ json: { testCases } });
     if (url.endsWith('/test-cases/11')) return route.fulfill({ json: {
       id: 11, title: 'Test case 11', url: 'https://dev.azure.com/org/project/_workitems/edit/11',
-      fields: [{ name: 'State', referenceName: 'System.State', value: 'Design' }], steps: mocks.steps,
+      fields: [{ name: 'State', referenceName: 'System.State', value: 'Design' }], steps: mocks.steps, stepsWarning: mocks.stepsWarning,
     } });
     return route.fulfill({ json: {} });
   });
@@ -86,14 +86,14 @@ browserTest('normalizes ADO text and exports correct Markdown for one row and al
   assert.deepEqual(lines.slice(0, 2), ['| Step | Action | Expected result |', '|---|---|---|']);
   assert.equal(lines[2], '| 1 | Open &lt;LNG Section&gt; &amp; Load Sample.hsc<br>Choose Plots<br>Compare X \\| Y. | Lists match<br>Keep A &lt; B. |');
   assert.equal(lines[3], '| 1.1 | 1. Inspect &lt;Flow Rate&gt;<br>2. Use &lt;sample.hsc&gt;. | |');
-  assert.equal(lines.length, 127);
-  assert.equal(lines.at(-1), '| 125 | Load case 125.hsc | |');
+  assert.equal(lines.length, 552);
+  assert.equal(lines.at(-1), '| 550 | Load case 550.hsc | |');
 
   const special = await page.evaluate(() => testStepMarkdown.table(testStepMarkdown.prepare([{
-    action: '<div>&lt;VAPOUR&gt; &amp;lt; &nbsp; _X_ [Y] *Z* ~α~ `tag`</div><script>remove me</script>2.5 bar',
+    action: '<div><P> &lt;VAPOUR&gt; &amp;lt; &nbsp; _X_ [Y] *Z* ~α~ `tag`</div><script>remove me</script>2.5 bar',
     expected: '<ul><li>Ready</li><li>Verify ≥ 1 &deg;C</li></ul>',
   }])));
-  assert.ok(special.includes('&lt;VAPOUR&gt; &amp;lt; \\_X\\_ \\[Y\\] \\*Z\\* \\~α\\~ \\`tag\\`<br>2.5 bar'));
+  assert.ok(special.includes('&lt;P&gt; &lt;VAPOUR&gt; &amp;lt; \\_X\\_ \\[Y\\] \\*Z\\* \\~α\\~ \\`tag\\`<br>2.5 bar'));
   assert.ok(special.endsWith('| - Ready<br>- Verify ≥ 1 °C |'));
   assert.ok(!special.includes('remove me'));
 });
@@ -130,9 +130,9 @@ browserTest('row copy is hover and keyboard accessible, and the modal traps focu
   const editor = dialog.getByRole('textbox', { name: 'Test steps Markdown' });
   const close = dialog.getByRole('button', { name: 'Close Copy Test Steps' });
   const copy = dialog.getByRole('button', { name: 'Copy', exact: true });
-  await dialog.getByText('125 steps').waitFor();
+  await dialog.getByText('550 steps').waitFor();
   const original = await editor.inputValue();
-  assert.equal(original.split('\n').length, 127);
+  assert.equal(original.split('\n').length, 552);
   assert.equal(await editor.evaluate((node) => node.scrollHeight > node.clientHeight), true);
   await page.keyboard.press('Escape');
   await page.mouse.click(4, 4);
@@ -234,4 +234,56 @@ browserTest('AI failures preserve edits, retries use the selected model, and dra
   assert.deepEqual(calls.filter(([url, method]) => url.startsWith('/api/work-items') && method !== 'GET'),
     [['/api/work-items/test-cases/search', 'POST']]);
   assert.equal(calls.filter(([url]) => url.endsWith('/rewrite-test-steps')).length, 3);
+});
+
+browserTest('copies an incomplete procedure and keeps AI-modification disabled', async ({ page, calls, mocks }) => {
+  mocks.steps = [{ number: '2', action: 'Shared steps: #123 (open in ADO to view)', expected: '' }];
+  mocks.stepsWarning = 'Some steps could not be loaded.';
+  await selectCase(page);
+  await page.getByRole('button', { name: 'Copy All Steps' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Copy Test Steps' });
+  const rewrite = dialog.getByRole('button', { name: 'AI-modification' });
+  await dialog.getByText(/AI-modification requires a complete procedure/).waitFor();
+  assert.equal(await rewrite.isDisabled(), true);
+  await rewrite.dispatchEvent('click');
+  assert.equal(calls.some(([url]) => url.endsWith('/rewrite-test-steps')), false);
+  await dialog.getByRole('button', { name: 'Copy', exact: true }).click();
+  assert.match(await clipboard(page), /\| 2 \| Shared steps: #123/);
+});
+
+browserTest('keeps reopened drafts independent of pending and invalid AI results', async ({ page, calls, mocks }) => {
+  mocks.steps = mocks.steps.slice(0, 1);
+  await selectCase(page);
+  const all = page.getByRole('button', { name: 'Copy All Steps' });
+  await all.click();
+  const dialog = page.getByRole('dialog', { name: 'Copy Test Steps' });
+  const rewrite = dialog.getByRole('button', { name: 'AI-modification' });
+  const editor = dialog.getByRole('textbox');
+  const aiCalls = () => calls.filter(([url]) => url.endsWith('/rewrite-test-steps')).length;
+  let complete;
+  mocks.rewrite = async (route) => {
+    const { steps } = route.request().postDataJSON();
+    await new Promise((resolve) => { complete = resolve; });
+    return route.fulfill({ json: { steps: steps.map((step) => ({ ...step, expected: 'Old response.' })) } });
+  };
+  await rewrite.click();
+  await dialog.getByRole('progressbar').waitFor();
+  await dialog.getByRole('button', { name: 'Close Copy Test Steps' }).click();
+  await all.click();
+  await dialog.getByText(/previous Copilot request is still finishing/).waitFor();
+  assert.equal(await rewrite.isDisabled(), true);
+  await editor.fill('New draft');
+  await rewrite.dispatchEvent('click');
+  assert.equal(aiCalls(), 1);
+  complete();
+  await dialog.getByRole('progressbar').waitFor({ state: 'hidden' });
+  assert.equal(await editor.inputValue(), 'New draft');
+  assert.equal(await rewrite.isEnabled(), true);
+
+  mocks.rewrite = (route) => route.fulfill({ json: { steps: [{ step: '2', action: 'Wrong step', expected: 'Ready' }] } });
+  await rewrite.click();
+  await dialog.getByText(/invalid rewritten steps/).waitFor();
+  assert.equal(await editor.inputValue(), 'New draft');
+  assert.equal(await rewrite.isEnabled(), true);
+  assert.equal(aiCalls(), 2);
 });

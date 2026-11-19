@@ -8,6 +8,10 @@ const testStepCopy = (() => {
   const rewrite = $('tcCopyRewrite');
   const close = $('tcCopyClose');
   let session;
+  let request;
+  let rowCopyAttempt = 0;
+  let rowFeedbackTimer;
+  const previousRequestMessage = 'The previous Copilot request is still finishing…';
   const copyError = 'Could not copy. Check clipboard access and try again.';
 
   function status(text = '', error = false) {
@@ -17,9 +21,9 @@ const testStepCopy = (() => {
 
   function controls() {
     mode.options[1].disabled = !session.generated.ai;
-    rewrite.disabled = Boolean(session.request || session.generated.ai);
+    rewrite.disabled = Boolean(request || session.generated.ai || session.incomplete);
     reset.disabled = editor.value === session.generated[mode.value];
-    $('tcCopyProgress').hidden = !session.request;
+    $('tcCopyProgress').hidden = !request;
   }
 
   function display(version) {
@@ -32,11 +36,11 @@ const testStepCopy = (() => {
   function open(steps, trigger, warning) {
     if (dialog.open) return;
     const original = testStepMarkdown.table(steps);
-    session = { steps, trigger, generated: { original }, draft: { original }, request: null };
+    session = { steps, trigger, generated: { original }, draft: { original }, incomplete: Boolean(warning) };
     $('tcCopyCount').textContent = `${steps.length} step${steps.length === 1 ? '' : 's'}`;
-    $('tcCopyWarning').textContent = warning || '';
+    $('tcCopyWarning').textContent = warning ? warning + ' AI-modification requires a complete procedure.' : '';
     $('tcCopyWarning').hidden = !warning;
-    status();
+    status(request ? previousRequestMessage : '');
     display('original');
     dialog.showModal();
     editor.focus();
@@ -57,7 +61,6 @@ const testStepCopy = (() => {
   close.addEventListener('click', () => {
     const previous = session;
     session = null;
-    previous.request?.abort();
     dialog.close();
     previous.trigger.focus();
   });
@@ -91,9 +94,14 @@ const testStepCopy = (() => {
 
   rewrite.addEventListener('click', async () => {
     const current = session;
-    if (current.request || current.generated.ai) return;
+    if (request || current.generated.ai || current.incomplete) return;
+    const model = $('chatModel').value;
+    if (!model) {
+      status('Connect to Copilot in Setup and select a Copilot model, then try again.', true);
+      return;
+    }
     const controller = new AbortController();
-    current.request = controller;
+    request = controller;
     if (document.activeElement === rewrite) editor.focus();
     controls();
     status('Copilot is rewriting the source steps…');
@@ -102,11 +110,11 @@ const testStepCopy = (() => {
       const data = await api('/api/chat/rewrite-test-steps', {
         method: 'POST',
         signal: controller.signal,
-        body: JSON.stringify({ model: $('chatModel').value, steps: current.steps }),
+        body: JSON.stringify({ model, steps: current.steps }),
       });
       if (current !== session) return;
-      if (!Array.isArray(data.steps) || data.steps.length !== current.steps.length) {
-        throw new Error('The backend returned an incomplete rewrite. Please try again.');
+      if (!testStepMarkdown.validRewrite(data.steps, current.steps)) {
+        throw new Error('The backend returned invalid rewritten steps. Please try again.');
       }
       const markdown = testStepMarkdown.table(data.steps);
       current.generated.ai = current.draft.ai = markdown;
@@ -118,9 +126,10 @@ const testStepCopy = (() => {
         : error instanceof TypeError ? 'Could not reach the app backend. Please try again.' : error.message, true);
     } finally {
       clearTimeout(timeout);
-      if (current === session) {
-        current.request = null;
+      request = null;
+      if (session) {
         controls();
+        if (current !== session && $('tcCopyStatus').textContent === previousRequestMessage) status();
       }
     }
   });
@@ -130,14 +139,21 @@ const testStepCopy = (() => {
     button.type = 'button';
     button.className = 'tc-step-copy';
     button.setAttribute('aria-label', `Copy step ${step.step}`);
+    button.title = `Copy step ${step.step}`;
     button.innerHTML = '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="8" y="8" width="11" height="11" rx="2"></rect><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"></path></svg>';
     button.addEventListener('click', async (event) => {
       event.stopPropagation();
+      const attempt = ++rowCopyAttempt;
+      clearTimeout(rowFeedbackTimer);
+      feedback('');
       try {
         await copyTextToClipboard(testStepMarkdown.table([step]));
-        feedback(`Step ${step.step} copied.`);
+        if (attempt === rowCopyAttempt) {
+          feedback(`Step ${step.step} copied.`);
+          rowFeedbackTimer = setTimeout(() => feedback(''), 3500);
+        }
       } catch {
-        feedback(copyError, true);
+        if (attempt === rowCopyAttempt) feedback(copyError, true);
       }
     });
     return button;

@@ -263,3 +263,27 @@ def test_rewrite_timeout_releases_lock_and_duplicate_is_rejected(browser, monkey
     session.send_and_wait.return_value.data.content = json.dumps(REWRITTEN_STEPS)
     assert post_rewrite(browser).status_code == 200
     assert session.send_and_wait.await_count == 2
+
+
+@pytest.mark.parametrize('expected,error', [
+    ('Verify pressure is > 250 kPa.', 'comparison operator'),
+    ('Verify pressure is >= 250 kPa with CheckPressure().', 'automation reference'),
+    ('Verify pressure is >= 250 kPa with #pressure-control.', 'automation reference'),
+])
+def test_rewrite_rejects_modified_operators_and_invented_selectors(browser, monkeypatch, expected, error):
+    connect(browser, monkeypatch)
+    source = [{**SOURCE_STEPS[0], 'expected': 'Pressure >= 250 kPa.'}]
+    rewrite = Mock(return_value=json.dumps([{**REWRITTEN_STEPS[0], 'expected': expected}]))
+    monkeypatch.setattr(AiClient, 'rewrite_test_steps', rewrite)
+    response = post_rewrite(browser, source)
+    assert response.status_code == 502
+    assert error in response.json['error']
+
+
+def test_rewrite_rejects_duplicate_json_keys(browser, monkeypatch):
+    connect(browser, monkeypatch)
+    duplicate = json.dumps(REWRITTEN_STEPS).replace('"step": "1",', '"step": "9", "step": "1",')
+    monkeypatch.setattr(AiClient, 'rewrite_test_steps', Mock(return_value=duplicate))
+    response = post_rewrite(browser)
+    assert response.status_code == 502
+    assert 'invalid JSON' in response.json['error']

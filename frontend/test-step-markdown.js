@@ -9,20 +9,34 @@ const testStepMarkdown = (() => {
   function parseHtml(value) {
     const template = document.createElement('template');
     const source = String(value ?? '');
-    const closingTags = new Set([...source.matchAll(/<\/([a-z][\w.:-]*)\s*>/gi)]
-      .map((tag) => tag[1].toUpperCase()));
+    const tags = /<!--[\s\S]*?-->|<\/?([a-z][^\s<>/]*)(?=[\s/>])(?:[^<>"']|"[^"]*"|'[^']*')*>|<\/?([a-z][^\s<>/]*)(?=[\s/>])[^<>]*>/gi;
+    const openings = new Map();
+    const paired = new Set();
+    // Prefer the spelling of the closing tag when a literal such as <P> sits inside <p>.
+    for (const match of source.matchAll(tags)) {
+      const label = match[1] || match[2];
+      if (!label) continue;
+      const upper = label.toUpperCase();
+      if (!html.has(upper)) continue;
+      if (!openings.has(upper)) openings.set(upper, []);
+      const open = openings.get(upper);
+      if (!match[0].startsWith('</')) {
+        open.push({ label, index: match.index });
+      } else if (open.length) {
+        const exactCase = open.findLastIndex((entry) => entry.label === label);
+        const [start] = open.splice(exactCase < 0 ? open.length - 1 : exactCase, 1);
+        paired.add(start.index);
+      }
+    }
     // Preserve literal ADO references such as <LNG Section> or <Sample.hsc>.
-    template.innerHTML = source.replace(
-      /<!--[\s\S]*?-->|<\/?([a-z][^\s<>/]*)(?=[\s/>])(?:[^<>"']|"[^"]*"|'[^']*')*>|<\/?([a-z][^\s<>/]*)(?=[\s/>])[^<>]*>/gi,
-      (tag, name, fallback) => {
-        const label = name || fallback;
-        if (!label) return tag;
-        const upper = label.toUpperCase();
-        const literalName = blocks.has(upper) && /^[A-Z][a-z]/.test(label)
-          && tag === `<${label}>` && !closingTags.has(upper);
-        return html.has(upper) && !literalName ? tag : tag.replaceAll('<', '&lt;').replaceAll('>', '&gt;');
-      },
-    );
+    template.innerHTML = source.replace(tags, (tag, name, fallback, offset) => {
+      const label = name || fallback;
+      if (!label) return tag;
+      const upper = label.toUpperCase();
+      const literalName = blocks.has(upper) && label !== label.toLowerCase()
+        && tag === `<${label}>` && !paired.has(offset);
+      return html.has(upper) && !literalName ? tag : tag.replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+    });
     return template.content;
   }
 
@@ -92,5 +106,12 @@ const testStepMarkdown = (() => {
     ].join('\n');
   }
 
-  return { parseHtml, prepare, table };
+  function validRewrite(steps, source) {
+    return Array.isArray(steps) && steps.length === source.length && steps.every((row, index) =>
+      row && Object.keys(row).length === 3 && row.step === source[index].step
+      && typeof row.action === 'string' && (!source[index].action.trim() || row.action.trim())
+      && typeof row.expected === 'string' && row.expected.trim());
+  }
+
+  return { parseHtml, prepare, table, validRewrite };
 })();

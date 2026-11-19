@@ -15,23 +15,25 @@ Use plain text inside the fields. Do not return Markdown, comments, or additiona
 In action, specify the navigation path and clearly state what to click, select, enter, add, remove,
 or inspect, when the source supports it. Separate operations from their observable expected results.
 Keep exact filenames, paths, control names, HYSYS objects, parameters, values, units, and technical
-identifiers. Keep details, conditions, and execution order. Do not fabricate data, UI selectors,
+identifiers. Preserve comparison operators. Keep details, conditions, and execution order. Do not fabricate data, UI selectors,
 COM API properties, automation methods, or tool/framework capabilities.
 
 If the source supplies an expectation (including one embedded in the action), state it as a concrete
 verification. When acceptance criteria are missing or ambiguous, state exactly what needs clarification.
 For an unspecified result use: Not specified in the original test case; requires clarification.
 Label any optional technique "Suggested verification:" and distinguish it from the source requirement.
-Do not invent expected values or imply success criteria the source does not establish. If a row
-reports a missing shared step or unavailable ADO data, preserve that notice verbatim.
+Do not invent expected values or imply success criteria the source does not establish.
 """.strip()
 
 STEP_KEYS = {"step", "action", "expected"}
+_ANGLE_LITERAL = re.compile(r"<[A-Za-z][^<>\n]*>")
+_OPERATORS = re.compile(r"<=|>=|==|!=|[<>≤≥≠=]")
+_CODE_REFERENCES = re.compile(r"\b[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*\(\s*\)|\[\s*(?:data-[\w-]+|xpath)\s*=|(?<!\w)#[A-Za-z_][\w-]*")
 STEP_LABEL = re.compile(r"[1-9][0-9]{0,5}(?:\.[1-9][0-9]{0,5})*")
 # Keep the check conservative. The model instructions cover names and phrases that cannot be
 # identified reliably from unstructured prose, such as unquoted UI labels.
 TECHNICAL_LITERAL = re.compile(r'''
-    <[^<>\n]+>
+    <[A-Za-z][^<>\n]*>
     | "[^"\n]+" | “[^”\n]+” | `[^`\n]+`
     | (?<!\w)(?://|\\\\|[A-Za-z]:[\\/])[^\s"<>|]+
     | (?<![\w@])@[\w.]+
@@ -83,6 +85,17 @@ def quantities(text):
     return {re.sub(r"\s+", "", quantity) for quantity in QUANTITY.findall(text)}
 
 
+def _unique_fields(pairs):
+    fields = dict(pairs)
+    if len(fields) != len(pairs):
+        raise ValueError("Duplicate JSON fields.")
+    return fields
+
+
+def _comparison_operators(text):
+    return set(_OPERATORS.findall(_ANGLE_LITERAL.sub("", text)))
+
+
 def validate_rewrite(answer, source):
     if not isinstance(answer, str) or not answer.strip():
         raise AiServiceError("Copilot returned no steps. Please try again.")
@@ -91,7 +104,7 @@ def validate_rewrite(answer, source):
     # Some models wrap valid JSON in a single code fence despite the plain JSON instruction.
     answer = re.sub(r"\A```(?:json)?[ \t]*\r?\n(.*)\r?\n```\Z", r"\1", answer.strip(), flags=re.DOTALL | re.IGNORECASE)
     try:
-        rows = json.loads(answer)
+        rows = json.loads(answer, object_pairs_hook=_unique_fields)
     except (ValueError, RecursionError):
         raise AiServiceError("Copilot returned invalid JSON. Please try again.") from None
     if not isinstance(rows, list) or len(rows) != len(source):
@@ -113,6 +126,10 @@ def validate_rewrite(answer, source):
         if numbers(before) != numbers(after) or quantities(before) != quantities(after) \
                 or not numbers(original["expected"]).issubset(numbers(row["expected"])):
             raise AiServiceError(f"Copilot changed numeric data in step {label}. Please try again.")
+        if _comparison_operators(before) != _comparison_operators(after):
+            raise AiServiceError(f"Copilot changed a comparison operator in step {label}. Please try again.")
+        if set(_CODE_REFERENCES.findall(after)) - set(_CODE_REFERENCES.findall(before)):
+            raise AiServiceError(f"Copilot added an automation reference in step {label}. Please try again.")
         row["action"] = row["action"].strip()
         row["expected"] = row["expected"].strip()
     return rows
