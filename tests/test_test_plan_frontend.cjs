@@ -23,6 +23,7 @@ function loadApp() {
     window: { setInterval() {} },
     navigator: { clipboard: { writeText: async (text) => { context.copied = text; } } },
   });
+  vm.runInContext(fs.readFileSync('frontend/clipboard.js', 'utf8'), context);
   vm.runInContext(fs.readFileSync('frontend/app.js', 'utf8'), context);
   return { context, nodes };
 }

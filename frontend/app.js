@@ -295,31 +295,10 @@ document.querySelector('#testSuiteForm').addEventListener('submit', async (event
   }
 });
 
-async function copyPlainText(text, container = document.body) {
-  if (navigator.clipboard?.writeText) {
-    await navigator.clipboard.writeText(text);
-    return;
-  }
-  // Support HTTP on local networks. Inside a modal the fallback must stay inside it.
-  const field = document.createElement('textarea');
-  field.value = text;
-  field.style.position = 'fixed';
-  field.style.opacity = '0';
-  const previousFocus = document.activeElement;
-  container.appendChild(field);
-  try {
-    field.select();
-    if (!document.execCommand('copy')) throw new Error('Copy unavailable');
-  } finally {
-    field.remove();
-    previousFocus?.focus();
-  }
-}
-
 async function copyTestSuite(failedOnly) {
   const markdown = testPointsMarkdown(visibleTestPoints, failedOnly);
   try {
-    await copyPlainText(markdown);
+    await copyTextToClipboard(markdown);
     setTestSuiteStatus(failedOnly ? 'Failed cases copied as Markdown.' : 'Table copied as Markdown.');
   } catch {
     setTestSuiteStatus('Could not copy. Allow clipboard access or open the app on localhost/HTTPS and try again.', true);

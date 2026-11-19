@@ -6,10 +6,10 @@ from flask import Blueprint, jsonify, request
 from services.ado_session import get_ado_client
 from services.ai_client import AiClient, AiServiceError
 from services.ai_session import ai_status, clear_ai_session, connect_ai_session, get_ai_session
-from services.test_step_rewrite import REWRITE_INSTRUCTIONS, read_source_steps, validate_rewrite
+from services.test_step_rewrite import REWRITE_INSTRUCTIONS, read_rewrite_steps, validate_rewrite
 
 chat_bp = Blueprint("chat", __name__, url_prefix="/api/chat")
-_rewrite_in_progress = Lock()
+_rewrite_lock = Lock()
 
 
 @chat_bp.errorhandler(AiServiceError)
@@ -45,24 +45,9 @@ def disconnect():
 
 def selected_model(payload, session):
     model = payload.get("model")
-    if not isinstance(model, str) or model not in {m["id"] for m in session.models}:
+    if not isinstance(model, str) or model not in {entry["id"] for entry in session.models}:
         raise ValueError("Select an available Copilot model.")
     return model
-
-
-@chat_bp.post("/test-steps/rewrite")
-def rewrite_test_steps():
-    payload = payload_object()
-    steps = read_source_steps(payload.get("steps"))
-    current = get_ai_session()
-    model = selected_model(payload, current)
-    if not _rewrite_in_progress.acquire(blocking=False):
-        raise AiServiceError("A test-step rewrite is already running. Try again when it finishes.", 409)
-    try:
-        answer = AiClient(current.token).rewrite_test_steps(steps, model=model, instructions=REWRITE_INSTRUCTIONS)
-        return jsonify({"steps": validate_rewrite(answer, steps)})
-    finally:
-        _rewrite_in_progress.release()
 
 
 @chat_bp.post("")
@@ -90,3 +75,18 @@ def chat():
     context = get_ado_client().read_work_items(ids) if ids else []
     answer = AiClient(current.token).chat(message.strip(), model=model, history=history, context=context)
     return jsonify({"answer": answer, "contextIds": ids})
+
+
+@chat_bp.post("/rewrite-test-steps")
+def rewrite_test_steps():
+    payload = payload_object()
+    steps = read_rewrite_steps(payload.get("steps"))
+    current = get_ai_session()
+    model = selected_model(payload, current)
+    if not _rewrite_lock.acquire(blocking=False):
+        raise AiServiceError("A test steps rewrite is already running. Wait for it to finish, then try again.", 409)
+    try:
+        answer = AiClient(current.token).rewrite_test_steps(steps, model=model, instructions=REWRITE_INSTRUCTIONS)
+        return jsonify({"steps": validate_rewrite(answer, steps)})
+    finally:
+        _rewrite_lock.release()

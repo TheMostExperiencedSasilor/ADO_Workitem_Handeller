@@ -31,10 +31,10 @@
     return data;
   }
   // Rebuild a small HTML allowlist. ADO descriptions/steps are untrusted rich text.
-  function rich(value) {
+  function rich(value, parse = (html) => new DOMParser().parseFromString(html, 'text/html').body) {
     const result = node('div', null, 'tc-rich');
     if (value == null || value === '') { result.textContent = 'Not provided'; return result; }
-    const parsed = new DOMParser().parseFromString(String(value), 'text/html');
+    const parsed = parse(String(value));
     const allowed = new Set(['P', 'DIV', 'BR', 'STRONG', 'B', 'I', 'EM', 'U', 'S', 'UL', 'OL', 'LI', 'TABLE', 'THEAD', 'TBODY', 'TR', 'TH', 'TD', 'PRE', 'CODE', 'BLOCKQUOTE', 'A']);
     const blocked = new Set(['SCRIPT', 'STYLE', 'IFRAME', 'OBJECT', 'EMBED', 'SVG', 'MATH', 'FORM', 'INPUT', 'BUTTON', 'LINK', 'META']);
     function copy(source, target) {
@@ -54,7 +54,7 @@
         copy(child, clean); target.appendChild(clean);
       }
     }
-    copy(parsed.body, result);
+    copy(parsed, result);
     return result;
   }
   function activateTab(panelId) {
@@ -154,6 +154,51 @@
     }).formatToParts(date).map((part) => [part.type, part.value]));
     return `${parts.month}/${parts.day}/${parts.year} ${parts.hour}:${parts.minute} ${parts.dayPeriod} ${parts.timeZoneName}`;
   }
+  function renderSteps(steps, warning) {
+    const content = node('div');
+    const toolbar = node('div', null, 'tc-step-toolbar');
+    const status = node('span');
+    status.setAttribute('role', 'status');
+    const copyAll = node('button', 'Copy All Steps', 'secondary-button');
+    copyAll.type = 'button';
+    copyAll.setAttribute('aria-haspopup', 'dialog');
+    copyAll.setAttribute('aria-controls', 'tcCopyDialog');
+    const normalizedSteps = testStepMarkdown.prepare(steps);
+    copyAll.addEventListener('click', () => testStepCopy.open(normalizedSteps, copyAll, warning));
+    toolbar.append(copyAll, status);
+    content.appendChild(toolbar);
+    if (warning) content.appendChild(node('p', warning, 'tc-hint'));
+
+    const table = node('table', null, 'tc-table tc-steps');
+    const head = node('thead');
+    const headings = node('tr');
+    ['Step', 'Action', 'Expected result'].forEach((label) => headings.appendChild(node('th', label)));
+    head.appendChild(headings);
+    const body = node('tbody');
+    steps.forEach((step, index) => {
+      const row = node('tr');
+      const prepared = normalizedSteps[index];
+      const number = node('td');
+      const stepControls = node('div', null, 'tc-step-controls');
+      stepControls.append(node('span', prepared.step), testStepCopy.buttonFor(prepared, (value, error = false) => {
+        status.textContent = value;
+        status.classList.toggle('tc-error', error);
+      }));
+      number.appendChild(stepControls);
+      row.appendChild(number);
+      for (const key of ['action', 'expected']) {
+        const cell = node('td');
+        cell.appendChild(rich(step[key], testStepMarkdown.parseHtml));
+        row.appendChild(cell);
+      }
+      body.appendChild(row);
+    });
+    table.append(head, body);
+    const wrap = node('div', null, 'tc-table-wrap');
+    wrap.appendChild(table);
+    content.appendChild(wrap);
+    return content;
+  }
   function renderCase(data) {
     const fields = data.fields;
     const find = (...names) => fields.find((field) => names.some((name) => normalized(field.name) === normalized(name)
@@ -172,54 +217,7 @@
     const preconditions = find('PreConditions', 'Precondition', 'PreConditionsBlock');
     if (preconditions) consumed.add(preconditions.referenceName);
     section(main, 'Pre Conditions', rich(preconditions?.value));
-    const steps = data.steps.map(testStepMarkdown.normalize);
-    const stepSection = node('section', null, 'tc-section');
-    const stepHeader = node('div', null, 'tc-steps-heading');
-    stepHeader.appendChild(node('h4', 'Steps'));
-    stepSection.appendChild(stepHeader);
-    if (steps.length) {
-      const copyAll = node('button', 'Copy All Steps', 'secondary-button');
-      copyAll.type = 'button';
-      copyAll.setAttribute('aria-haspopup', 'dialog');
-      copyAll.setAttribute('aria-controls', 'tcStepCopyDialog');
-      copyAll.addEventListener('click', () => testStepCopy.open(copyAll, steps, data.steps.some((step) => step.unavailable)));
-      stepHeader.appendChild(copyAll);
-      const feedback = node('p', '', 'tc-steps-feedback');
-      feedback.setAttribute('role', 'status');
-      stepSection.appendChild(feedback);
-      const table = node('table', null, 'tc-table tc-steps');
-      const head = node('thead'); const headings = node('tr');
-      ['Step', 'Action', 'Expected result'].forEach((label) => headings.appendChild(node('th', label)));
-      head.appendChild(headings); table.appendChild(head);
-      const body = node('tbody');
-      const copyButtons = [];
-      data.steps.forEach((step, index) => {
-        const row = node('tr');
-        const number = node('td');
-        const numberAndCopy = node('div', null, 'tc-step-number');
-        numberAndCopy.appendChild(node('span', String(steps[index].step)));
-        if (!step.unavailable) {
-          const button = testStepCopy.rowButton(steps[index], feedback);
-          numberAndCopy.appendChild(button);
-          copyButtons.push(button);
-        }
-        number.appendChild(numberAndCopy);
-        row.appendChild(number);
-        for (const key of ['action', 'expected']) {
-          const cell = node('td');
-          cell.appendChild(rich(testStepMarkdown.protectLiteralTags(step[key] ?? '')));
-          row.appendChild(cell);
-        }
-        body.appendChild(row);
-      });
-      table.appendChild(body);
-      const wrap = node('div', null, 'tc-table-wrap');
-      wrap.appendChild(table);
-      stepSection.appendChild(wrap);
-    } else {
-      stepSection.appendChild(node('p', 'No steps provided.'));
-    }
-    main.appendChild(stepSection);
+    section(main, 'Steps', data.steps.length ? renderSteps(data.steps, data.stepsWarning) : node('p', 'No steps provided.'));
     function fieldList(entries) {
       const list = node('dl', null, 'tc-field-list');
       entries.forEach((entry) => { const term = node('dt', entry.name); term.title = entry.referenceName;

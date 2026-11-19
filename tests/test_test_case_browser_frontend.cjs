@@ -45,7 +45,6 @@ function loadBrowser({ timeZone } = {}) {
     fetch: async (url, options) => { calls.push([url, options]); return context.respond(url, options); },
     respond: async () => ({ ok: true, json: async () => ({}) }),
   });
-  vm.runInContext(fs.readFileSync('frontend/test-step-markdown.js', 'utf8'), context);
   vm.runInContext(fs.readFileSync('frontend/test-case-browser.js', 'utf8'), context);
   const json = (data, ok = true) => ({ ok, json: async () => data });
   const submit = () => $('tcSearch').listeners.submit({ preventDefault() {} });

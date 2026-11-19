@@ -89,10 +89,48 @@ def test_detail_uses_ado_field_names_and_steps(browser, monkeypatch):
     monkeypatch.setattr('services.test_case_browser.requests.get', Mock(return_value=response({'value': [
         {'referenceName': 'Custom.PreReq', 'name': 'Pre Conditions'}, {'referenceName': 'Custom.Tool', 'name': 'Automation Test Tool'}]})))
     detail = browser.detail(24143)
-    assert detail['steps'] == [{'action': '<b>Load</b>', 'expected': 'Loaded'}, {'action': 'Shared steps #123 could not be loaded. Open in ADO to view them.', 'expected': '', 'unavailable': True}]
+    assert detail['steps'] == [
+        {'number': '1', 'action': '<b>Load</b>', 'expected': 'Loaded'},
+        {'number': '2', 'action': 'Shared steps: #123 (open in ADO to view)', 'expected': ''},
+    ]
+    assert 'Some steps could not be loaded' in detail['stepsWarning']
     assert next(f for f in detail['fields'] if f['referenceName'] == 'Custom.Tool')['name'] == 'Automation Test Tool'
     assert detail['url'] == 'https://dev.azure.com/org/QA%20Project/_workitems/edit/24143'
     assert not detail['warning']
+
+
+def test_shared_steps_expand_in_order_and_reuse_the_read(browser):
+    case = item(12)
+    shared = item(123, kind='Shared Steps')
+    case['fields']['Microsoft.VSTS.TCM.Steps'] = '''
+      <steps><step><parameterizedString>First</parameterizedString></step>
+        <compref ref="123"/><step><parameterizedString>Third</parameterizedString></step>
+        <compref ref="123"/></steps>
+    '''
+    shared['fields']['Microsoft.VSTS.TCM.Steps'] = '''
+      <steps><step><parameterizedString>Shared action</parameterizedString>
+        <parameterizedString>Shared result</parameterizedString></step>
+        <step><parameterizedString>Second shared action</parameterizedString></step></steps>
+    '''
+    browser.client.read_work_items = Mock(return_value=[shared])
+    steps, warning = browser._detail_steps(case['fields']['Microsoft.VSTS.TCM.Steps'])
+    assert [(row['number'], row['action'], row['expected']) for row in steps] == [
+        ('1', 'First', ''), ('2.1', 'Shared action', 'Shared result'), ('2.2', 'Second shared action', ''),
+        ('3', 'Third', ''), ('4.1', 'Shared action', 'Shared result'), ('4.2', 'Second shared action', ''),
+    ]
+    assert not warning
+    browser.client.read_work_items.assert_called_once_with([123])
+
+
+def test_unavailable_and_cyclic_shared_steps_are_reported(browser):
+    shared = item(123, kind='Shared Steps')
+    shared['fields']['Microsoft.VSTS.TCM.Steps'] = '<steps><compref ref="123"/></steps>'
+    other = item(234, kind='Shared Steps', project='Other Project')
+    browser.client.read_work_items = Mock(side_effect=[[shared], [other], requests.Timeout()])
+    steps, warning = browser._detail_steps('<steps><compref ref="123"/><compref ref="234"/><compref ref="456"/></steps>')
+    assert [row['number'] for row in steps] == ['1.1', '2', '3']
+    assert all('open in ADO to view' in row['action'] for row in steps)
+    assert warning
 
 
 @pytest.mark.parametrize('raw', [item(1, kind='Bug'), item(1, project='Other Project')])
@@ -100,47 +138,6 @@ def test_detail_rejects_other_type_or_project(browser, raw):
     browser.client.read_work_items = Mock(return_value=[raw])
     with pytest.raises(LookupError):
         browser.detail(1)
-
-
-def test_detail_expands_embedded_and_linked_shared_steps_in_order(browser, monkeypatch):
-    def steps(raw, source):
-        raw['fields']['Microsoft.VSTS.TCM.Steps'] = source
-        return raw
-
-    case = steps(item(1), """<steps>
-        <step id="21"><parameterizedString><P>Open <B>HYSYS</B></P></parameterizedString></step>
-        <compref ref="2"><step id="19"><parameterizedString isformatted="false">&lt;b&gt; &amp;amp;</parameterizedString></step></compref>
-        <compref ref="3"/><compref ref="3"/>
-        <compref ref="4"/><compref ref="5"/>
-        <step id="4"><parameterizedString>Save</parameterizedString></step>
-    </steps>""")
-    shared = steps(item(3, kind='Shared Steps'),
-                   '<steps><step id="8"><parameterizedString>Run</parameterizedString><parameterizedString>Ready</parameterizedString></step></steps>')
-    denied = steps(item(4, kind='Shared Steps', project='Other project'),
-                   '<steps><step><parameterizedString>Private</parameterizedString></step></steps>')
-    circular = steps(item(5, kind='Shared Steps'), '<steps><compref ref="5"/></steps>')
-    items = {1: case, 3: shared, 4: denied, 5: circular}
-    client = browser.client
-    client.read_work_items = Mock(side_effect=lambda ids: [items[ids[0]]])
-    monkeypatch.setattr('services.test_case_browser.requests.get', Mock(return_value=response({'value': []})))
-    exported = browser.detail(1)['steps']
-    assert [row['action'] for row in exported] == [
-        '<P>Open <B>HYSYS</B></P>', '&lt;b&gt; &amp;amp;', 'Run', 'Run',
-        'Shared steps #4 could not be loaded. Open in ADO to view them.',
-        'Shared steps #5 could not be loaded. Open in ADO to view them.', 'Save',
-    ]
-    assert [row['expected'] for row in exported] == ['', '', 'Ready', 'Ready', '', '', '']
-    assert [row.get('unavailable', False) for row in exported] == [False, False, False, False, True, True, False]
-    assert [call.args[0] for call in client.read_work_items.call_args_list] == [[1], [3], [4], [5]]
-
-
-def test_failed_shared_steps_and_malformed_xml_are_marked_incomplete():
-    read = Mock(side_effect=requests.Timeout)
-    steps = parse_steps('<steps><compref ref="8"/><compref ref="8"/></steps>', read)
-    assert len(steps) == 2 and all(step['unavailable'] for step in steps)
-    read.assert_called_once_with(8)
-    assert parse_steps('<unrecognized/>')[0]['unavailable'] is True
-    assert parse_steps('') == []
 
 
 def test_metadata_unavailable_does_not_hide_case(browser, monkeypatch):
@@ -271,3 +268,24 @@ def test_exact_point_supplies_missing_plan_with_recorded_suite_id(browser):
     assert row['testPlan'] == 'Recovered Plan (8)'
     assert row['testSuite'] == 'Recorded Suite (7)'
     browser._get.assert_not_called()
+
+
+def test_inline_xml_and_shared_step_ids_preserve_action_text_and_numbering():
+    read_shared = Mock(return_value='<steps><step><parameterizedString>Linked</parameterizedString></step></steps>')
+    incomplete = Mock()
+    result = parse_steps("""
+      <steps>
+        <step><parameterizedString>Open <B>HYSYS</B> now</parameterizedString></step>
+        <compref ref="2"><step><parameterizedString isformatted="false">&lt;b&gt; &amp;amp;</parameterizedString></step></compref>
+        <compref ref="3"><step id="8" /></compref>
+        <step><parameterizedString>Save</parameterizedString></step>
+      </steps>
+    """, read_shared, incomplete)
+    assert [(row['number'], row['action']) for row in result] == [
+        ('1', 'Open <B>HYSYS</B> now'), ('2.1', '&lt;b&gt; &amp;amp;'),
+        ('3.1', 'Linked'), ('4', 'Save'),
+    ]
+    read_shared.assert_called_once_with(3)
+    incomplete.assert_not_called()
+    assert parse_steps('<unrecognized/>', mark_incomplete=incomplete)[0]['action'].startswith('Steps could not be parsed')
+    incomplete.assert_called_once()
