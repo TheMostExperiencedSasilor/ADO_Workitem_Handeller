@@ -33,7 +33,7 @@ def test_case_errors(handler):
             if status in (401, 403):
                 message = "ADO access failed. Check the PAT's Work Items read and Test Management permissions."
             elif status == 404:
-                message = "Test Case or execution history API not found, or access is unavailable."
+                message = "Test Case data not found, or access is unavailable."
             else:
                 message = "Azure DevOps could not load test case data. Please try again."
             return jsonify({"error": message}), status if status in (401, 403, 404) else 502
@@ -64,3 +64,9 @@ def read_test_case_history(case_id):
     if not skip.isascii() or not skip.isdigit() or len(skip) > 8:
         raise ValueError("Invalid history page.")
     return jsonify(TestCaseBrowser(get_ado_client()).history(positive_id(case_id), int(skip)))
+
+
+@work_items_bp.get("/test-cases/<int:case_id>/modification-history")
+@test_case_errors
+def read_test_case_modification_history(case_id):
+    return jsonify(TestCaseBrowser(get_ado_client()).modification_history(positive_id(case_id)))

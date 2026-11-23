@@ -63,7 +63,8 @@
       tab.setAttribute('aria-selected', String(active)); tab.tabIndex = active ? 0 : -1;
       $(tab.dataset.tcTab).hidden = !active;
     });
-    if (panelId !== 'tcHistory') closeCalendar(false);
+    if (activeRange?.panel !== panelId) closeCalendar(false);
+    if (panelId === 'tcModHistory') modifications.load();
     if (panelId === 'tcHistory' && !state.historyLoaded && !state.historyBusy) loadHistory(true);
   }
   tabs.forEach((tab, index) => {
@@ -109,7 +110,7 @@
   $('tcPrev').addEventListener('click', () => { state.page--; renderResults(); });
   $('tcNext').addEventListener('click', () => { state.page++; renderResults(); });
   function clearSelection() {
-    closeCalendar(false); calendar.awaitingEnd = false; calendar.focus = '';
+    closeCalendar(false); modifications.reset();
     state.version++; state.selected = null; state.historyLoaded = false; state.historyBusy = false;
     state.nextSkip = null; state.historyRows = [];
     $('tcSelected').hidden = true; $('tcHistoryRows').replaceChildren();
@@ -117,7 +118,7 @@
     $('tcDetailProgress').hidden = true; $('tcHistoryProgress').hidden = true;
     state.historyPage = 0; state.historyError = ''; state.historyPageMessage = ''; state.historyWarnings = new Set();
     historyFilterIds.forEach((id) => { $(id).value = ''; }); renderHistory();
-    message('tcDetailStatus', ''); message('tcHistoryStatus', 'Open History to load execution results.');
+    message('tcDetailStatus', ''); message('tcHistoryStatus', 'Open Execution History to load execution results.');
   }
   $('tcSearch').addEventListener('submit', async (event) => {
     event.preventDefault();
@@ -143,16 +144,6 @@
   function acceptedDateField(field) {
     const names = ['automatedandaccepteddate', 'automatedaccepteddate'];
     return names.includes(normalized(field.name)) || names.includes(normalized(field.referenceName.split('.').pop()));
-  }
-  function fieldValue(field) {
-    if (!acceptedDateField(field) || !field.value) return text(field.value);
-    const date = new Date(field.value);
-    if (Number.isNaN(date.getTime())) return text(field.value);
-    const parts = Object.fromEntries(new Intl.DateTimeFormat('en-US', {
-      month: 'short', day: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
-      hour12: true, timeZoneName: 'short',
-    }).formatToParts(date).map((part) => [part.type, part.value]));
-    return `${parts.month}/${parts.day}/${parts.year} ${parts.hour}:${parts.minute} ${parts.dayPeriod} ${parts.timeZoneName}`;
   }
   function renderSteps(steps, warning) {
     const content = node('div');
@@ -221,8 +212,13 @@
     function fieldList(entries) {
       const list = node('dl', null, 'tc-field-list');
       entries.forEach((entry) => { const term = node('dt', entry.name); term.title = entry.referenceName;
-        const detail = node('dd'); detail.appendChild(rich(fieldValue(entry)));
-        if (acceptedDateField(entry)) detail.title = text(entry.value);
+        const detail = node('dd');
+        if (acceptedDateField(entry) || testCaseDateTime.isDateField(entry, entry.value)) {
+          detail.textContent = testCaseDateTime.format(entry.value, text(entry.value));
+          if (entry.value) detail.title = text(entry.value);
+        } else {
+          detail.appendChild(rich(text(entry.value)));
+        }
         list.append(term, detail); });
       return list;
     }
@@ -242,7 +238,8 @@
     section(planning, 'Classification', fieldList(fields.filter((field) => ['System.State', 'System.Reason', 'System.AssignedTo', 'System.AreaPath', 'System.IterationPath', 'System.Tags'].includes(field.referenceName))));
     layout.append(main, planning); $('tcDetails').appendChild(layout);
     $('tcSelected').hidden = false;
-    activateTab('tcDetails');
+    modifications.reset(data.id, fields);
+    activateTab('tcModHistory');
   }
   async function selectCase(id) {
     clearSelection(); state.selected = id; const version = state.version;
@@ -256,6 +253,8 @@
   }
   const historyFilterIds = ['tcHistorySuite', 'tcHistoryPlan', 'tcHistoryOutcome', 'tcHistoryTester', 'tcHistoryFrom', 'tcHistoryTo'];
   const calendar = { month: new Date(), awaitingEnd: false, focus: '', buttons: new Map() };
+  const popup = $('tcHistoryCalendar');
+  let activeRange = null;
   const dayKey = (date) => `${String(date.getFullYear()).padStart(4, '0')}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
   const readDay = (key) => {
     const date = /^\d{4}-\d{2}-\d{2}$/.test(key || '') ? new Date(`${key}T12:00:00`) : null;
@@ -266,40 +265,42 @@
     const date = readDay(key);
     return date && !Number.isNaN(date.getTime()) ? new Intl.DateTimeFormat('en-US', { month: 'short', day: '2-digit', year: 'numeric' }).format(date) : '';
   }
-  function updateCalendarTrigger() {
-    const start = $('tcHistoryFrom').value, end = $('tcHistoryTo').value;
-    $('tcHistoryDateTrigger').classList.toggle('active', Boolean(start || end));
-    $('tcHistoryDateTrigger').title = start || end
+  function updateCalendarTrigger(range) {
+    const start = range.from.value, end = range.to.value;
+    range.trigger.classList.toggle('active', Boolean(start || end));
+    range.trigger.title = start || end
       ? `${calendarDateLabel(start) || 'Any date'} – ${calendarDateLabel(end) || 'Any date'}. Click to choose a date range.`
       : 'Choose a start date, then an end date. A third click starts a new range.';
   }
   function positionCalendar() {
-    const popup = $('tcHistoryCalendar');
-    if (popup.hidden) return;
-    const anchor = $('tcHistoryDateTrigger').getBoundingClientRect();
+    if (!activeRange) return;
+    const anchor = activeRange.trigger.getBoundingClientRect();
     const width = popup.offsetWidth || 310, height = popup.offsetHeight || 390;
     const left = Math.max(12, Math.min(anchor.right - width, window.innerWidth - width - 12));
     const top = anchor.bottom + height + 8 <= window.innerHeight - 12 ? anchor.bottom + 8 : Math.max(12, anchor.top - height - 8);
     popup.style.left = `${left}px`; popup.style.top = `${top}px`;
   }
   function closeCalendar(returnFocus = true) {
-    $('tcHistoryCalendar').hidden = true;
-    $('tcHistoryDateTrigger').setAttribute('aria-expanded', 'false');
-    if (returnFocus) $('tcHistoryDateTrigger').focus();
+    if (!activeRange) return;
+    const { trigger } = activeRange;
+    popup.hidden = true;
+    activeRange = null;
+    trigger.setAttribute('aria-expanded', 'false');
+    if (returnFocus) trigger.focus();
   }
   function chooseCalendarDay(key) {
-    let start = $('tcHistoryFrom').value;
+    const { from, to, onChange } = activeRange;
+    const start = from.value;
     if (!calendar.awaitingEnd || !start) {
-      $('tcHistoryFrom').value = key; $('tcHistoryTo').value = ''; calendar.awaitingEnd = true;
+      from.value = key; to.value = ''; calendar.awaitingEnd = true;
     } else {
-      // Reversed clicks still form an inclusive chronological range.
-      $('tcHistoryFrom').value = key < start ? key : start;
-      $('tcHistoryTo').value = key < start ? start : key;
+      from.value = key < start ? key : start;
+      to.value = key < start ? start : key;
       calendar.awaitingEnd = false;
     }
     const date = readDay(key);
     calendar.month = monthDay(date.getFullYear(), date.getMonth()); calendar.focus = key;
-    goHistory(0); renderCalendar(); calendar.buttons.get(key)?.focus();
+    onChange(); renderCalendar(); calendar.buttons.get(key)?.focus();
   }
   function moveCalendarMonth(offset) {
     calendar.month = monthDay(calendar.month.getFullYear(), calendar.month.getMonth() + offset);
@@ -322,7 +323,7 @@
   }
   function renderCalendar() {
     const year = calendar.month.getFullYear(), month = calendar.month.getMonth();
-    const start = $('tcHistoryFrom').value, end = $('tcHistoryTo').value, today = dayKey(new Date());
+    const start = activeRange.from.value, end = activeRange.to.value, today = dayKey(new Date());
     const monthLabel = new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric' }).format(calendar.month);
     $('tcCalendarMonth').replaceChildren();
     for (let index = 0; index < 12; index++) {
@@ -361,18 +362,35 @@
     }
     $('tcCalendarRange').textContent = start ? `${calendarDateLabel(start)}${end ? ` – ${calendarDateLabel(end)}` : ' – …'}` : end ? `Through ${calendarDateLabel(end)}` : 'All dates';
     $('tcCalendarHint').textContent = calendar.awaitingEnd ? 'Choose an end date.' : start && end ? 'Range selected. Click a date to start a new range.' : 'Choose a start date.';
-    updateCalendarTrigger(); positionCalendar();
+    updateCalendarTrigger(activeRange); positionCalendar();
   }
-  $('tcHistoryDateTrigger').addEventListener('click', () => {
-    if (!$('tcHistoryCalendar').hidden) { closeCalendar(); return; }
-    const start = readDay($('tcHistoryFrom').value);
-    const latest = state.historyRows.map((row) => new Date(row.loggedDate)).find((date) => !Number.isNaN(date.getTime()));
-    const date = start || readDay($('tcHistoryTo').value) || latest || new Date();
-    calendar.month = monthDay(date.getFullYear(), date.getMonth()); calendar.focus = dayKey(date);
-    calendar.awaitingEnd = Boolean($('tcHistoryFrom').value && !$('tcHistoryTo').value);
-    $('tcHistoryCalendar').hidden = false; $('tcHistoryDateTrigger').setAttribute('aria-expanded', 'true');
-    renderCalendar(); calendar.buttons.get(calendar.focus)?.focus();
-  });
+  function bindCalendar(panel, latest, onChange) {
+    const range = { panel, from: $(panel + 'From'), to: $(panel + 'To'), trigger: $(panel + 'DateTrigger'), onChange };
+    const { from, to, trigger } = range;
+    trigger.addEventListener('click', () => {
+      if (activeRange === range) { closeCalendar(); return; }
+      closeCalendar(false);
+      activeRange = range;
+      const date = readDay(from.value || to.value) || readDay(testCaseDateTime.dayKey(latest())) || new Date();
+      calendar.month = monthDay(date.getFullYear(), date.getMonth()); calendar.focus = dayKey(date);
+      calendar.awaitingEnd = Boolean(from.value && !to.value);
+      popup.hidden = false; trigger.setAttribute('aria-expanded', 'true');
+      renderCalendar(); calendar.buttons.get(calendar.focus)?.focus();
+    });
+    return {
+      update: () => updateCalendarTrigger(range),
+      sync: () => {
+        updateCalendarTrigger(range);
+        if (activeRange === range) {
+          calendar.awaitingEnd = Boolean(from.value && !to.value);
+          renderCalendar();
+        }
+      },
+    };
+  }
+  const executionCalendar = bindCalendar('tcHistory', () => state.historyRows.find((row) => testCaseDateTime.parse(row.loggedDate))?.loggedDate, () => goHistory(0));
+  const modificationCalendar = bindCalendar('tcModHistory', () => modifications.latest(), () => modifications.filter());
+  const modifications = createModificationHistory({ $, node, request, rich, syncCalendar: modificationCalendar.sync });
   $('tcCalendarPrev').addEventListener('click', () => moveCalendarMonth(-1));
   $('tcCalendarNext').addEventListener('click', () => moveCalendarMonth(1));
   $('tcCalendarMonth').addEventListener('change', () => {
@@ -382,19 +400,21 @@
     calendar.month = monthDay(Number($('tcCalendarYear').value), calendar.month.getMonth()); calendar.focus = dayKey(calendar.month); renderCalendar();
   });
   $('tcCalendarClear').addEventListener('click', () => {
-    $('tcHistoryFrom').value = ''; $('tcHistoryTo').value = ''; calendar.awaitingEnd = false; goHistory(0); renderCalendar();
+    const { from, to, onChange } = activeRange;
+    from.value = ''; to.value = ''; calendar.awaitingEnd = false; onChange(); renderCalendar();
   });
   $('tcCalendarClose').addEventListener('click', () => closeCalendar());
   $('tcCalendarDone').addEventListener('click', () => closeCalendar());
   document.addEventListener('click', (event) => {
-    // A day click rebuilds the grid before this event bubbles. Its original
-    // event path still identifies it as an inside click after the node is gone.
+    if (!activeRange) return;
+    // The event path survives a day button being replaced when the grid refreshes.
     const path = event.composedPath?.() || [];
-    if (!$('tcHistoryCalendar').hidden && !path.includes($('tcHistoryCalendar')) && !path.includes($('tcHistoryDateTrigger'))
-      && !$('tcHistoryCalendar').contains(event.target) && !$('tcHistoryDateTrigger').contains(event.target)) closeCalendar(false);
+    const { trigger } = activeRange;
+    if (!path.includes(popup) && !path.includes(trigger)
+      && !popup.contains(event.target) && !trigger.contains(event.target)) closeCalendar(false);
   });
   document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape' && !$('tcHistoryCalendar').hidden) { event.preventDefault(); closeCalendar(); }
+    if (event.key === 'Escape' && activeRange) { event.preventDefault(); closeCalendar(); }
   });
   window.addEventListener('resize', positionCalendar);
   document.addEventListener('scroll', positionCalendar, true);
@@ -403,34 +423,31 @@
   function filteredHistory() {
     const contains = (value, id) => String(value || '').toLowerCase().includes($(id).value.trim().toLowerCase());
     const wanted = outcomeKey($('tcHistoryOutcome').value);
-    const from = $('tcHistoryFrom').value ? new Date(`${$('tcHistoryFrom').value}T00:00:00`) : null;
-    const to = $('tcHistoryTo').value ? new Date(`${$('tcHistoryTo').value}T23:59:59.999`) : null;
+    const from = $('tcHistoryFrom').value, to = $('tcHistoryTo').value;
     state.historyFilterError = from && to && from > to ? 'From date must be on or before To date.' : '';
     return state.historyFilterError ? [] : state.historyRows.filter((item) => {
       const outcome = outcomeKey(item.result);
       const resultMatch = !wanted || (wanted === 'other'
         ? !['failed', 'passed', 'blocked', 'notexecuted', 'notrun', 'inconclusive', 'aborted'].includes(outcome)
         : wanted === 'notexecuted' ? ['notexecuted', 'notrun'].includes(outcome) : outcome === wanted);
-      const date = new Date(item.loggedDate);
       return contains(item.testSuite, 'tcHistorySuite') && contains(item.testPlan, 'tcHistoryPlan')
         && contains(item.tester, 'tcHistoryTester') && resultMatch
-        && (!(from || to) || (!Number.isNaN(date.getTime()) && (!from || date >= from) && (!to || date <= to)));
+        && testCaseDateTime.inRange(item.loggedDate, from, to);
     });
   }
   function renderHistory() {
-    updateCalendarTrigger();
+    executionCalendar.update();
     const filtered = filteredHistory();
     const size = historySize(), pages = Math.ceil(filtered.length / size);
     state.historyPage = Math.max(0, Math.min(state.historyPage, Math.max(0, pages - 1)));
     $('tcHistoryRows').replaceChildren();
     filtered.slice(state.historyPage * size, (state.historyPage + 1) * size).forEach((item) => {
       const row = node('tr');
-      const date = new Date(item.loggedDate);
-      const dateText = item.loggedDate && !Number.isNaN(date.getTime()) ? date.toLocaleString() : 'Not recorded';
+      const dateText = testCaseDateTime.format(item.loggedDate);
       for (const value of [item.testSuite, item.testPlan, item.result, dateText, item.tester || 'Not recorded']) row.appendChild(node('td', text(value)));
       const resultCell = row.children[2];
       resultCell.className = outcomeKey(item.result) === 'passed' ? 'tc-passed' : outcomeKey(item.result) === 'failed' ? 'tc-failed' : '';
-      row.children[3].title = item.loggedDate;
+      if (item.loggedDate) row.children[3].title = item.loggedDate;
       $('tcHistoryRows').appendChild(row);
     });
     if (!filtered.length && state.historyLoaded) {
@@ -450,7 +467,7 @@
     $('tcHistory').setAttribute('aria-busy', String(state.historyBusy));
     const status = state.historyError ? `${state.historyError} Use Retry loading to continue, or Refresh history to start again.`
       : state.historyBusy ? `Loading execution history… ${state.historyRows.length} results loaded; searching older executions.`
-      : !state.historyLoaded ? 'Open History to load execution results.'
+      : !state.historyLoaded ? 'Open Execution History to load execution results.'
       : state.historyRows.length ? `${state.historyRows.length} execution results loaded. All available history has been checked.`
       : 'No execution history returned by ADO for this test case.';
     const warning = [...state.historyWarnings].join(' ');
@@ -473,14 +490,14 @@
   $('tcHistoryPage').addEventListener('keydown', (event) => { if (event.key === 'Enter') { event.preventDefault(); typedHistoryPage(); } });
   $('tcHistoryPageSize').addEventListener('change', () => goHistory(0));
   historyFilterIds.forEach((id) => $(id).addEventListener('input', () => {
-    if (id === 'tcHistoryFrom' || id === 'tcHistoryTo') {
-      calendar.awaitingEnd = Boolean($('tcHistoryFrom').value && !$('tcHistoryTo').value);
-      if (!$('tcHistoryCalendar').hidden) renderCalendar();
-    }
+    if (id === 'tcHistoryFrom' || id === 'tcHistoryTo') executionCalendar.sync();
     goHistory(0);
   }));
-  $('tcHistoryClear').addEventListener('click', () => { historyFilterIds.forEach((id) => { $(id).value = ''; }); calendar.awaitingEnd = false; goHistory(0);
-    if (!$('tcHistoryCalendar').hidden) renderCalendar(); });
+  $('tcHistoryClear').addEventListener('click', () => {
+    historyFilterIds.forEach((id) => { $(id).value = ''; });
+    executionCalendar.sync();
+    goHistory(0);
+  });
   async function loadHistory(reset = false) {
     if (!state.selected || state.historyBusy) return;
     const version = state.version;

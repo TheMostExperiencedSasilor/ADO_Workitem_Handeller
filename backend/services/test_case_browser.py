@@ -1,4 +1,4 @@
-"""Read-only Test Case search and execution history against Azure DevOps."""
+"""Read-only Test Case search and history against Azure DevOps."""
 import re
 from html import escape
 from urllib.parse import unquote, urlparse
@@ -10,6 +10,11 @@ __test__ = False  # Service module, not a pytest test module.
 
 
 MAX_ID = 2147483647
+STEPS_FIELD = "Microsoft.VSTS.TCM.Steps"
+UPDATE_METADATA = {
+    "System.Rev", "System.Watermark", "System.AuthorizedAs", "System.AuthorizedDate",
+    "System.RevisedDate", "System.ChangedDate", "System.ChangedBy",
+}
 
 
 def positive_id(value):
@@ -65,9 +70,9 @@ class TestCaseBrowser:
             raise ValueError("Unexpected Azure DevOps response.")
         return response.json()
 
-    def _get(self, path):
+    def _get(self, path, params=None):
         response = requests.get(f"{self.client.base_url}/_apis/{path}", headers=self.client.headers,
-                                params={"api-version": self.client.config.ado_api_version},
+                                params={"api-version": self.client.config.ado_api_version, **(params or {})},
                                 timeout=30, allow_redirects=False)
         response.raise_for_status()
         data = response.json()
@@ -208,7 +213,7 @@ class TestCaseBrowser:
         items.sort(key=lambda item: (item["rank"], int(item["id"])))
         return items
 
-    def detail(self, case_id):
+    def _require_case(self, case_id):
         items = self.client.read_work_items([case_id])
         item = next((item for item in items if int(item["id"]) == case_id), None)
         if not item or item.get("fields", {}).get("System.WorkItemType") != "Test Case":
@@ -217,19 +222,26 @@ class TestCaseBrowser:
         # Work item IDs are organization-wide; do not expose another project's case.
         if fields.get("System.TeamProject", "").casefold() != unquote(self.client.config.ado_project).casefold():
             raise LookupError("Test Case not found in the connected project.")
-        names = {}
+        return fields
+
+    def detail(self, case_id):
+        fields = self._require_case(case_id)
+        metadata = {}
         metadata_warning = ""
         try:
             response = requests.get(f"{self.client.base_url}/_apis/wit/fields", headers=self.client.headers,
                                     params={"api-version": self.client.config.ado_api_version}, timeout=30,
                                     allow_redirects=False)
             response.raise_for_status()
-            names = {entry["referenceName"]: entry["name"] for entry in response.json()["value"]}
+            metadata = {entry["referenceName"]: entry for entry in response.json()["value"]}
         except (requests.RequestException, KeyError, TypeError, ValueError):
             metadata_warning = "Some field labels are derived from their reference names because ADO field labels could not be loaded."
-        entries = [{"referenceName": key, "name": names.get(key) or re.sub(r"(?<=[a-z])(?=[A-Z])", " ", key.split(".")[-1]),
-                    "value": value} for key, value in fields.items()]
-        steps, steps_warning = self._detail_steps(fields.get("Microsoft.VSTS.TCM.Steps", ""))
+        entries = []
+        for key, value in fields.items():
+            definition = metadata.get(key, {})
+            entries.append({"referenceName": key, "name": definition.get("name") or field_label(key),
+                            "type": definition.get("type"), "value": value})
+        steps, steps_warning = self._detail_steps(fields.get(STEPS_FIELD, ""))
         return {"id": case_id, "title": fields.get("System.Title", ""), "fields": entries,
                 "steps": steps, "stepsWarning": steps_warning,
                 "url": f"{self.client.base_url}/_workitems/edit/{case_id}", "warning": metadata_warning}
@@ -253,7 +265,7 @@ class TestCaseBrowser:
                     fields = item.get("fields") or {}
                     if (str(item.get("id")) == str(reference) and fields.get("System.WorkItemType") == "Shared Steps"
                             and (fields.get("System.TeamProject") or "").casefold() == project):
-                        shared_steps[reference] = fields.get("Microsoft.VSTS.TCM.Steps", "")
+                        shared_steps[reference] = fields.get(STEPS_FIELD, "")
                         break
                 else:
                     shared_steps[reference] = ""
@@ -262,6 +274,26 @@ class TestCaseBrowser:
         rows = parse_steps(xml, read_shared, mark_incomplete)
         warning = "Some steps could not be loaded. Open the test case in ADO to review the missing steps." if incomplete else ""
         return rows, warning
+
+    def modification_history(self, case_id):
+        self._require_case(case_id)
+        updates, seen = [], set()
+        page_size = 100
+        while True:
+            data = self._get(f"wit/workItems/{case_id}/updates", {"$top": page_size, "$skip": len(updates)})
+            page = data.get("value")
+            if not isinstance(page, list):
+                raise ValueError("Invalid Azure DevOps work item updates response.")
+            for update in page:
+                update_id = update.get("id")
+                if str(update.get("workItemId")) != str(case_id) or type(update_id) is not int:
+                    raise ValueError("Unexpected entry in Azure DevOps work item updates.")
+                if update_id in seen:
+                    raise ValueError("Azure DevOps work item updates did not advance.")
+                seen.add(update_id)
+                updates.append(describe_update(update))
+            if len(page) < page_size:
+                return {"updates": updates}
 
     def history(self, case_id, skip=0, page_size=50):
         # Query actual results, including manual runs, rather than current point status.
@@ -286,6 +318,81 @@ class TestCaseBrowser:
                          "tester": display_value(result.get("runBy"))})
         return {"history": rows, "nextSkip": skip + page_size if len(values) > page_size else None,
                 "warnings": warnings}
+
+
+def field_label(reference_name):
+    return re.sub(r"(?<=[a-z])(?=[A-Z])", " ", reference_name.split(".")[-1])
+
+
+def describe_update(update):
+    fields = update.get("fields") or {}
+    revision = update.get("rev")
+    created_date = fields.get("System.CreatedDate", {}).get("newValue")
+    created = revision == 1 and (update["id"] == 1 or created_date)
+    revised_date = update.get("revisedDate")
+    # revisedDate can identify when ADO superseded a revision. It can also be a year-9999 sentinel.
+    changed_date = (fields.get("System.ChangedDate", {}).get("newValue")
+                    or (created_date if created else None)
+                    or fields.get("System.AuthorizedDate", {}).get("newValue")
+                    or (revised_date if revised_date and not revised_date.startswith("9999-") else None))
+    author = fields.get("System.ChangedBy", {}).get("newValue") or update.get("revisedBy")
+    author_id = (author.get("id") or author.get("uniqueName")) if isinstance(author, dict) else None
+    changes = []
+    for reference, delta in fields.items():
+        if reference in UPDATE_METADATA or delta.get("oldValue") == delta.get("newValue"):
+            continue
+        if reference == STEPS_FIELD:
+            steps = compare_steps(delta.get("oldValue"), delta.get("newValue"))
+            changes.append({"field": reference, "label": "Test Steps", "steps": steps})
+        else:
+            changes.append({"field": reference, "label": field_label(reference),
+                            "before": delta.get("oldValue"), "after": delta.get("newValue")})
+    relations = []
+    relation_changes = update.get("relations") or {}
+    for operation in ("added", "removed", "updated"):
+        for relation in relation_changes.get(operation) or []:
+            attributes = relation.get("attributes") or {}
+            relations.append({"operation": operation, "type": relation.get("rel"),
+                              "name": attributes.get("name"), "target": relation.get("url"),
+                              "comment": attributes.get("comment")})
+    return {"id": update["id"], "revision": revision, "created": bool(created), "changedAt": changed_date,
+            "author": display_value(author), "authorId": author_id, "fields": changes, "relations": relations}
+
+
+def compare_steps(previous, current):
+    def snapshot(xml):
+        if xml is not None and not isinstance(xml, str):
+            return None, False
+        malformed = False
+
+        def mark_malformed():
+            nonlocal malformed
+            malformed = True
+        rows = parse_steps(xml, mark_incomplete=mark_malformed, include_identity=True)
+        return (None if malformed else rows), any(row.get("shared") for row in rows)
+
+    before, before_shared = snapshot(previous)
+    after, after_shared = snapshot(current)
+    note = "Shared step contents are available when included in the historical Test Steps field." if before_shared or after_shared else ""
+    if before is None or after is None:
+        return {"before": before, "after": after, "warning": "ADO returned unreadable Test Steps for at least one version."}
+
+    old_keys = [row["key"] for row in before]
+    new_keys = [row["key"] for row in after]
+    if any(None in keys or len(set(keys)) != len(keys) for keys in (old_keys, new_keys)):
+        return {"before": before, "after": after,
+                "warning": "Some step IDs are missing or repeated. Showing both versions in their original order.", "note": note}
+
+    old_rows, new_rows = dict(zip(old_keys, before)), dict(zip(new_keys, after))
+    old_positions = {key: index for index, key in enumerate(key for key in old_keys if key in new_rows)}
+    new_positions = {key: index for index, key in enumerate(key for key in new_keys if key in old_rows)}
+    changes = []
+    for key in new_keys + [key for key in old_keys if key not in new_rows]:
+        old, new = old_rows.get(key), new_rows.get(key)
+        moved = old is not None and new is not None and old_positions[key] != new_positions[key]
+        if old is None or new is None or moved or any(old[cell] != new[cell] for cell in ("action", "expected")):
+            changes.append({"before": old, "after": new, "moved": moved})
+    return {"changes": changes, "note": note}
 
 
 def display_value(value):
@@ -318,29 +425,38 @@ def _step_cell(part):
     )
 
 
-def parse_steps(xml, read_shared=None, mark_incomplete=lambda: None):
+def parse_steps(xml, read_shared=None, mark_incomplete=lambda: None, *, include_identity=False):
     if not xml:
         return []
 
-    def parse_group(group, prefix="", active=(), depth=0):
+    def parse_group(group, prefix="", active=(), depth=0, parent_key=()):
+        def row_values(number, action, expected, key, shared=False):
+            row = {"number": number, "action": action, "expected": expected}
+            if include_identity:
+                row.update(key=key, shared=shared)
+            return row
+
         entries = [child for child in group if child.tag in ("step", "compref")]
         rows = []
         for index, child in enumerate(entries, 1):
             number = f"{prefix}{index}"
+            step_id = child.get("id")
+            key = (*parent_key, step_id) if parent_key is not None and step_id else None
             if child.tag == "step":
                 parts = child.findall("parameterizedString")
                 action, expected = ([_step_cell(part) for part in parts[:2]] + ["", ""])[:2]
-                rows.append({"number": number, "action": action, "expected": expected})
+                rows.append(row_values(number, action, expected, key))
                 continue
 
             reference = child.get("ref", "")
+            shared_key = (*parent_key, f"compref:{step_id}:{reference}") if key is not None else None
             resolved = []
             if depth < 12:
                 # A reference can contain real steps or only the IDs used by the parent case.
                 inline = any(part.tag == "compref" or part.find("parameterizedString") is not None
                              for part in child if part.tag in ("step", "compref"))
                 if inline:
-                    resolved = parse_group(child, f"{number}.", active, depth + 1)
+                    resolved = parse_group(child, f"{number}.", active, depth + 1, shared_key)
                 elif read_shared:
                     try:
                         shared_id = positive_id(reference)
@@ -353,15 +469,17 @@ def parse_steps(xml, read_shared=None, mark_incomplete=lambda: None):
             if resolved:
                 rows.extend(resolved)
             else:
-                mark_incomplete()
+                if not include_identity:
+                    mark_incomplete()
                 label = f" #{reference}" if re.fullmatch(r"[0-9]{1,10}", reference) else ""
-                rows.append({"number": number, "action": f"Shared steps:{label} (open in ADO to view)", "expected": ""})
+                rows.append(row_values(number, f"Shared steps:{label} (open in ADO to view)", "", shared_key, shared=True))
         return rows
 
     try:
-        root = ElementTree.fromstring(xml)
-        if root.tag == "steps":
-            return parse_group(root)
+        if not re.search(r"<!DOCTYPE", xml, re.IGNORECASE):
+            root = ElementTree.fromstring(xml)
+            if root.tag == "steps":
+                return parse_group(root)
     except ElementTree.ParseError:
         pass
     mark_incomplete()
