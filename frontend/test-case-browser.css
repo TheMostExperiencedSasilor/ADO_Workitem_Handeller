@@ -1,12 +1,12 @@
-[data-work-page="test-case"] { min-width: 0; }
-[data-work-page="test-case"] [hidden] { display: none !important; }
+:is([data-work-page="test-case"], [data-work-page="post-development-bug"]) { min-width: 0; }
+:is([data-work-page="test-case"], [data-work-page="post-development-bug"]) [hidden] { display: none !important; }
 .tc-search { display: flex; gap: 12px; align-items: end; flex-wrap: wrap; margin-top: 18px; }
 .tc-search label { display: flex; flex-direction: column; gap: 7px; margin: 0; font-size: 13px; font-weight: 600; }
 .tc-search .tc-query { flex: 1 1 300px; }
 .tc-search input, .tc-search select, .tc-search button { height: 40px; margin: 0; }
 .tc-search select { min-width: 140px; }
 .tc-search button { min-width: 100px; }
-[data-work-page="test-case"] button:disabled { opacity: .5; cursor: not-allowed; }
+:is([data-work-page="test-case"], [data-work-page="post-development-bug"]) button:disabled { opacity: .5; cursor: not-allowed; }
 .tc-hint { color: var(--muted); font-size: 13px; line-height: 1.6; margin: 8px 0 12px; }
 .tc-error { color: var(--danger); }
 .tc-table-wrap { overflow: auto; border: 1px solid var(--border); border-radius: 6px; }
@@ -14,17 +14,17 @@
 .tc-table th { background: #f6f8fc; color: #44516a; font-weight: 600; white-space: nowrap; }
 .tc-table td, .tc-table th { padding: 12px; border-bottom: 1px solid var(--border); vertical-align: top; line-height: 1.5; }
 .tc-table tr:last-child td { border-bottom: 0; }
-#tcResultRows tr { cursor: pointer; }
-#tcResultRows tr:hover { background: #f7faff; }
-#tcResultRows .tc-selected-row { background: #edf5ff; box-shadow: inset 3px 0 var(--accent); }
-#tcResultRows input[type="radio"] { width: 17px; height: 17px; margin: 2px 0; accent-color: var(--accent); }
-#tcResultRows td:nth-child(3) { min-width: 230px; width: 55%; }
+:is(#tcResultRows, #pdbResultRows) tr { cursor: pointer; }
+:is(#tcResultRows, #pdbResultRows) tr:hover { background: #f7faff; }
+:is(#tcResultRows, #pdbResultRows) .tc-selected-row { background: #edf5ff; box-shadow: inset 3px 0 var(--accent); }
+:is(#tcResultRows, #pdbResultRows) input[type="radio"] { width: 17px; height: 17px; margin: 2px 0; accent-color: var(--accent); }
+:is(#tcResultRows, #pdbResultRows) td:nth-child(3) { min-width: 230px; width: 55%; }
 .tc-pagination { display: flex; align-items: center; justify-content: flex-end; gap: 12px; margin: 12px 0; color: var(--muted); font-size: 13px; }
 .tc-pagination button { margin: 0; }
 .tc-selected-heading { display: flex; align-items: start; justify-content: space-between; gap: 20px; margin-top: 24px; padding: 20px; background: #f7fafc; border: 1px solid var(--border); border-left: 4px solid #008a88; border-radius: 6px 6px 0 0; }
 .tc-eyebrow { display: block; color: #007c7c; font-size: 12px; font-weight: 700; margin-bottom: 8px; }
-#tcSelectedMeta { color: var(--muted); font-size: 13px; margin-bottom: 0; line-height: 1.6; }
-#tcAdoLink { flex-shrink: 0; font-size: 13px; color: var(--accent); padding: 5px 0; }
+:is(#tcSelectedMeta, #pdbSelectedMeta) { color: var(--muted); font-size: 13px; margin-bottom: 0; line-height: 1.6; }
+:is(#tcAdoLink, #pdbAdoLink) { flex-shrink: 0; font-size: 13px; color: var(--accent); padding: 5px 0; }
 .tc-tabs { display: flex; gap: 20px; border-bottom: 1px solid var(--border); padding: 0 20px; }
 .tc-tabs button { background: transparent; color: var(--muted); border: 0; border-bottom: 3px solid transparent; border-radius: 0; margin: 0; padding: 15px 4px 12px; font-weight: 600; }
 .tc-tabs button[aria-selected="true"] { border-bottom-color: var(--accent); color: var(--accent); }
@@ -104,7 +104,7 @@
 .tc-calendar-hint { color: var(--muted); font-size: 12px; line-height: 1.4; margin: 0 0 10px; }
 .tc-calendar-actions { display: flex; justify-content: space-between; gap: 12px; }
 .tc-calendar-actions button { padding: 7px 11px; font-size: 13px; }
-#tcCalendarClear { color: var(--accent); background: #edf4ff; }
+:is(#tcCalendarClear, #pdbCalendarClear) { color: var(--accent); background: #edf4ff; }
 
 .tc-step-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 10px; font-size: 13px; }
 .tc-step-toolbar button { margin: 0; }
@@ -165,11 +165,11 @@
   border-radius: 5px; background: white; color: var(--muted);
 }
 .tc-mod-date-controls .tc-date-trigger:hover, .tc-mod-date-controls .tc-date-trigger.active { background: #edf4ff; color: var(--accent); }
-#tcModHistoryStatus:empty { display: none; }
+:is(#tcModHistoryStatus, #pdbModHistoryStatus):empty { display: none; }
 .tc-mod-layout { display: grid; grid-template-columns: minmax(235px, 1fr) minmax(0, 2fr); gap: 16px; align-items: start; }
 .tc-mod-timeline, .tc-mod-details { border: 1px solid var(--border); border-radius: 6px; min-width: 0; }
-#tcModHistoryTimeline { max-height: min(60vh, 560px); overflow: auto; list-style: none; margin: 0; padding: 0; }
-#tcModHistoryTimeline li + li { border-top: 1px solid var(--border); }
+:is(#tcModHistoryTimeline, #pdbModHistoryTimeline) { max-height: min(60vh, 560px); overflow: auto; list-style: none; margin: 0; padding: 0; }
+:is(#tcModHistoryTimeline, #pdbModHistoryTimeline) li + li { border-top: 1px solid var(--border); }
 .tc-mod-entry {
   display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px; align-items: start;
   width: 100%; padding: 11px; border-radius: 0; margin: 0; min-height: 56px;
@@ -202,10 +202,18 @@
 .tc-mod-step-values dd { margin: 0; }
 @media (max-width: 780px) {
   .tc-mod-layout { grid-template-columns: minmax(0, 1fr); }
-  #tcModHistoryTimeline { max-height: 235px; }
+  :is(#tcModHistoryTimeline, #pdbModHistoryTimeline) { max-height: 235px; }
 }
 @media (max-width: 460px) {
   .tc-tabs { gap: 8px; padding-inline: 4px; }
   .tc-icon-tab:last-child .tc-tab-tooltip { left: auto; right: 0; transform: none; }
   .tc-mod-pair { grid-template-columns: minmax(0, 1fr); }
 }
+
+.tc-link-count { padding: 1px 5px; border-radius: 999px; background: #eee; font-size: 11px; }
+.tc-link-count:empty, #pdbLinksStatus:empty { display: none; }
+#pdbLinksTab { grid-auto-flow: column; gap: 5px; }
+.tc-links-group { margin-bottom: 12px; }
+.tc-links-group caption { padding: 9px 12px; text-align: left; font-weight: 650; }
+.tc-links-group td:first-child { min-width: 180px; }
+.tc-links-group td { overflow-wrap: anywhere; }

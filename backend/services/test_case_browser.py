@@ -1,4 +1,4 @@
-"""Read-only Test Case search and history against Azure DevOps."""
+"""Read-only work item search and history against Azure DevOps."""
 import re
 from html import escape
 from urllib.parse import unquote, urlparse
@@ -19,10 +19,10 @@ UPDATE_METADATA = {
 
 def positive_id(value):
     if isinstance(value, bool) or not re.fullmatch(r"[0-9]{1,10}", str(value)):
-        raise ValueError("Test case ID must be a positive 32-bit integer.")
+        raise ValueError("Work item ID must be a positive 32-bit integer.")
     number = int(value)
     if not 0 < number <= MAX_ID:
-        raise ValueError("Test case ID must be a positive 32-bit integer.")
+        raise ValueError("Work item ID must be a positive 32-bit integer.")
     return number
 
 
@@ -53,7 +53,9 @@ def title_rank(title, query):
     return 3 if re.search(".*?".join(re.escape(word) for word in query.split()), title) else None
 
 
-class TestCaseBrowser:
+class WorkItemBrowser:
+    work_item_type: str
+
     def __init__(self, client):
         self.client = client
 
@@ -79,6 +81,112 @@ class TestCaseBrowser:
         if response.status_code != 200 or not isinstance(data, dict):
             raise ValueError("Invalid Azure DevOps metadata response.")
         return data
+
+    def search(self, field, mode, query):
+        conditions = ["[System.TeamProject] = @project", f"[System.WorkItemType] = '{self.work_item_type}'"]
+        if field == "id":
+            number = int(query)
+            if mode == "exact":
+                conditions.append(f"[System.Id] = {number}")
+            else:
+                # WIQL IDs are numeric: prefix matching is a union of numeric ranges.
+                ranges = []
+                for digits in range(11 - len(query)):
+                    low = number * 10 ** digits
+                    if low > MAX_ID:
+                        break
+                    high = min((number + 1) * 10 ** digits - 1, MAX_ID)
+                    ranges.append(f"([System.Id] >= {low} AND [System.Id] <= {high})")
+                conditions.append("(" + " OR ".join(ranges) + ")")
+        else:
+            words = query.split() if mode == "flexible" else [query]
+            operator = "CONTAINS" if mode == "flexible" else "="
+            conditions.extend(f"[System.Title] {operator} '{word.replace(chr(39), chr(39) * 2)}'" for word in words)
+
+        items, after = [], 0
+        while True:
+            wiql = "SELECT [System.Id] FROM WorkItems WHERE " + " AND ".join(conditions)
+            wiql += f" AND [System.Id] > {after} ORDER BY [System.Id] ASC"
+            data = self._post("wit/wiql", {"query": wiql}, {"$top": 1000})
+            refs = data.get("workItems")
+            if not isinstance(refs, list):
+                raise ValueError("Invalid Azure DevOps search response.")
+            ids = [positive_id(item["id"]) for item in refs]
+            if not ids:
+                break
+            if min(ids) <= after:
+                raise ValueError("Azure DevOps search did not advance.")
+            for start in range(0, len(ids), 200):
+                for item in self.client.read_work_items(ids[start:start + 200]):
+                    fields = item.get("fields", {})
+                    if fields.get("System.WorkItemType") != self.work_item_type:
+                        continue
+                    title = fields.get("System.Title", "")
+                    rank = title_rank(title, query) if field == "title" and mode == "flexible" else 1
+                    if rank is None:
+                        continue
+                    items.append({"id": item["id"], "title": title, "state": fields.get("System.State", ""),
+                                  "assignedTo": display_value(fields.get("System.AssignedTo")), "rank": rank})
+            after = max(ids)
+            if len(ids) < 1000:
+                break
+        items.sort(key=lambda item: (item["rank"], int(item["id"])))
+        return items
+
+    def _require_item(self, item_id):
+        items = self.client.read_work_items([item_id])
+        item = next((item for item in items if int(item["id"]) == item_id), None)
+        fields = item.get("fields", {}) if item else {}
+        project = unquote(self.client.config.ado_project).casefold()
+        if (fields.get("System.WorkItemType") != self.work_item_type
+                or fields.get("System.TeamProject", "").casefold() != project):
+            raise LookupError(f"{self.work_item_type} not found in the connected project.")
+        return item
+
+    def _detail_data(self, item):
+        fields = item["fields"]
+        metadata = {}
+        metadata_warning = ""
+        try:
+            response = requests.get(f"{self.client.base_url}/_apis/wit/fields", headers=self.client.headers,
+                                    params={"api-version": self.client.config.ado_api_version}, timeout=30,
+                                    allow_redirects=False)
+            response.raise_for_status()
+            metadata = {entry["referenceName"]: entry for entry in response.json()["value"]}
+        except (requests.RequestException, KeyError, TypeError, ValueError):
+            metadata_warning = "Some field labels are derived from their reference names because ADO field labels could not be loaded."
+        entries = []
+        for key, value in fields.items():
+            definition = metadata.get(key, {})
+            entries.append({"referenceName": key, "name": definition.get("name") or field_label(key),
+                            "type": definition.get("type"), "value": value})
+        item_id = item["id"]
+        return {"id": item_id, "title": fields.get("System.Title", ""), "fields": entries,
+                "url": f"{self.client.base_url}/_workitems/edit/{item_id}", "warning": metadata_warning}
+
+    def modification_history(self, case_id):
+        self._require_item(case_id)
+        updates, seen = [], set()
+        page_size = 100
+        while True:
+            data = self._get(f"wit/workItems/{case_id}/updates", {"$top": page_size, "$skip": len(updates)})
+            page = data.get("value")
+            if not isinstance(page, list):
+                raise ValueError("Invalid Azure DevOps work item updates response.")
+            for update in page:
+                update_id = update.get("id")
+                if str(update.get("workItemId")) != str(case_id) or type(update_id) is not int:
+                    raise ValueError("Unexpected entry in Azure DevOps work item updates.")
+                if update_id in seen:
+                    raise ValueError("Azure DevOps work item updates did not advance.")
+                seen.add(update_id)
+                updates.append(describe_update(update))
+            if len(page) < page_size:
+                return {"updates": updates}
+
+
+class TestCaseBrowser(WorkItemBrowser):
+    work_item_type = "Test Case"
 
     def _case_point_contexts(self, case_id):
         """Match executions to exact points; never guess from case membership."""
@@ -162,89 +270,11 @@ class TestCaseBrowser:
             references.append((reference_label(plan), reference_label(suite)))
         return references, sorted(warnings)
 
-    def search(self, field, mode, query):
-        conditions = ["[System.TeamProject] = @project", "[System.WorkItemType] = 'Test Case'"]
-        if field == "id":
-            number = int(query)
-            if mode == "exact":
-                conditions.append(f"[System.Id] = {number}")
-            else:
-                # WIQL IDs are numeric: prefix matching is a union of numeric ranges.
-                ranges = []
-                for digits in range(11 - len(query)):
-                    low = number * 10 ** digits
-                    if low > MAX_ID:
-                        break
-                    high = min((number + 1) * 10 ** digits - 1, MAX_ID)
-                    ranges.append(f"([System.Id] >= {low} AND [System.Id] <= {high})")
-                conditions.append("(" + " OR ".join(ranges) + ")")
-        else:
-            words = query.split() if mode == "flexible" else [query]
-            operator = "CONTAINS" if mode == "flexible" else "="
-            conditions.extend(f"[System.Title] {operator} '{word.replace(chr(39), chr(39) * 2)}'" for word in words)
-
-        items, after = [], 0
-        while True:
-            wiql = "SELECT [System.Id] FROM WorkItems WHERE " + " AND ".join(conditions)
-            wiql += f" AND [System.Id] > {after} ORDER BY [System.Id] ASC"
-            data = self._post("wit/wiql", {"query": wiql}, {"$top": 1000})
-            refs = data.get("workItems")
-            if not isinstance(refs, list):
-                raise ValueError("Invalid Azure DevOps search response.")
-            ids = [positive_id(item["id"]) for item in refs]
-            if not ids:
-                break
-            if min(ids) <= after:
-                raise ValueError("Azure DevOps search did not advance.")
-            for start in range(0, len(ids), 200):
-                for item in self.client.read_work_items(ids[start:start + 200]):
-                    fields = item.get("fields", {})
-                    if fields.get("System.WorkItemType") != "Test Case":
-                        continue
-                    title = fields.get("System.Title", "")
-                    rank = title_rank(title, query) if field == "title" and mode == "flexible" else 1
-                    if rank is None:
-                        continue
-                    items.append({"id": item["id"], "title": title, "state": fields.get("System.State", ""),
-                                  "assignedTo": display_value(fields.get("System.AssignedTo")), "rank": rank})
-            after = max(ids)
-            if len(ids) < 1000:
-                break
-        items.sort(key=lambda item: (item["rank"], int(item["id"])))
-        return items
-
-    def _require_case(self, case_id):
-        items = self.client.read_work_items([case_id])
-        item = next((item for item in items if int(item["id"]) == case_id), None)
-        if not item or item.get("fields", {}).get("System.WorkItemType") != "Test Case":
-            raise LookupError("Test Case not found in the connected project.")
-        fields = item["fields"]
-        # Work item IDs are organization-wide; do not expose another project's case.
-        if fields.get("System.TeamProject", "").casefold() != unquote(self.client.config.ado_project).casefold():
-            raise LookupError("Test Case not found in the connected project.")
-        return fields
-
     def detail(self, case_id):
-        fields = self._require_case(case_id)
-        metadata = {}
-        metadata_warning = ""
-        try:
-            response = requests.get(f"{self.client.base_url}/_apis/wit/fields", headers=self.client.headers,
-                                    params={"api-version": self.client.config.ado_api_version}, timeout=30,
-                                    allow_redirects=False)
-            response.raise_for_status()
-            metadata = {entry["referenceName"]: entry for entry in response.json()["value"]}
-        except (requests.RequestException, KeyError, TypeError, ValueError):
-            metadata_warning = "Some field labels are derived from their reference names because ADO field labels could not be loaded."
-        entries = []
-        for key, value in fields.items():
-            definition = metadata.get(key, {})
-            entries.append({"referenceName": key, "name": definition.get("name") or field_label(key),
-                            "type": definition.get("type"), "value": value})
-        steps, steps_warning = self._detail_steps(fields.get(STEPS_FIELD, ""))
-        return {"id": case_id, "title": fields.get("System.Title", ""), "fields": entries,
-                "steps": steps, "stepsWarning": steps_warning,
-                "url": f"{self.client.base_url}/_workitems/edit/{case_id}", "warning": metadata_warning}
+        item = self._require_item(case_id)
+        detail = self._detail_data(item)
+        detail["steps"], detail["stepsWarning"] = self._detail_steps(item["fields"].get(STEPS_FIELD, ""))
+        return detail
 
     def _detail_steps(self, xml):
         shared_steps = {}
@@ -274,26 +304,6 @@ class TestCaseBrowser:
         rows = parse_steps(xml, read_shared, mark_incomplete)
         warning = "Some steps could not be loaded. Open the test case in ADO to review the missing steps." if incomplete else ""
         return rows, warning
-
-    def modification_history(self, case_id):
-        self._require_case(case_id)
-        updates, seen = [], set()
-        page_size = 100
-        while True:
-            data = self._get(f"wit/workItems/{case_id}/updates", {"$top": page_size, "$skip": len(updates)})
-            page = data.get("value")
-            if not isinstance(page, list):
-                raise ValueError("Invalid Azure DevOps work item updates response.")
-            for update in page:
-                update_id = update.get("id")
-                if str(update.get("workItemId")) != str(case_id) or type(update_id) is not int:
-                    raise ValueError("Unexpected entry in Azure DevOps work item updates.")
-                if update_id in seen:
-                    raise ValueError("Azure DevOps work item updates did not advance.")
-                seen.add(update_id)
-                updates.append(describe_update(update))
-            if len(page) < page_size:
-                return {"updates": updates}
 
     def history(self, case_id, skip=0, page_size=50):
         # Query actual results, including manual runs, rather than current point status.

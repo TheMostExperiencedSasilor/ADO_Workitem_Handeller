@@ -40,6 +40,7 @@ const browserTest = (name, run) => test(name, { skip: !chromium && 'Enable real-
   steps[1].action = '<ol><li><div>Inspect <Flow Rate></div></li><li>Use <sample.hsc>.</li></ol>';
   const mocks = {
     steps, stepsWarning: '',
+    bug: (route) => route.fulfill({ status: 404, json: { error: 'Bug fixture not configured.' } }),
     modifications: (route) => route.fulfill({ json: { updates: [] } }),
     executions: (route) => route.fulfill({ json: { history: [], nextSkip: null } }),
     rewrite: (route) => route.fulfill({ json: { steps: [] } }),
@@ -52,6 +53,7 @@ const browserTest = (name, run) => test(name, { skip: !chromium && 'Enable real-
     if (url === '/api/chat/status') return route.fulfill({ json: {
       connected: true, models: [{ id: 'luna', name: 'Luna' }, { id: 'other', name: 'Other' }],
     } });
+    if (url.includes('/post-development-bugs/')) return mocks.bug(route);
     if (url.endsWith('/modification-history')) return mocks.modifications(route);
     if (url.endsWith('/history')) return mocks.executions(route);
     if (url.endsWith('/search')) return route.fulfill({ json: { testCases } });
@@ -339,6 +341,7 @@ browserTest('case selection opens Details and the history tabs preserve executio
     } });
   };
   await openCase(page);
+  const casePage = page.locator('[data-work-page="test-case"]');
   const mods = page.getByRole('tab', { name: 'Modification History', exact: true });
   const executions = page.getByRole('tab', { name: 'Execution History', exact: true });
   const timeline = page.getByRole('region', { name: 'Revision timeline' });
@@ -351,13 +354,13 @@ browserTest('case selection opens Details and the history tabs preserve executio
   await mods.click();
   await details.getByText('Step 1 updated').waitFor();
   assert.equal(await mods.getAttribute('aria-selected'), 'true');
-  assert.deepEqual(await page.locator('.tc-icon-tab').evaluateAll((tabs) => tabs.map(
+  assert.deepEqual(await casePage.locator('.tc-icon-tab').evaluateAll((tabs) => tabs.map(
     (tab) => [tab.getAttribute('aria-label'), tab.querySelector('svg').getAttribute('width')],
   )), [['Modification History', '20'], ['Execution History', '20']]);
   assert.equal(calls.filter(([url]) => url.endsWith('/history')).length, 0);
   await mods.hover();
   assert.equal(await mods.locator('.tc-tab-tooltip').isVisible(), true);
-  const border = () => page.locator('.tc-icon-tab').evaluateAll((tabs) => tabs.map(
+  const border = () => casePage.locator('.tc-icon-tab').evaluateAll((tabs) => tabs.map(
     (tab) => getComputedStyle(tab).borderBottomColor,
   ));
   const [blue, transparent] = await border();
@@ -377,9 +380,9 @@ browserTest('case selection opens Details and the history tabs preserve executio
   await timeline.getByRole('button', { name: 'Next revision page' }).click();
   assert.match(await timeline.innerText(), /Page 2 of 2/);
   assert.equal(await timeline.locator('.tc-mod-entry').count(), 5);
-  await page.getByLabel('Modified by').selectOption('joy');
+  await casePage.getByLabel('Modified by').selectOption('joy');
   assert.equal(await timeline.locator('.tc-mod-entry').count(), 2);
-  await page.getByLabel('Modification type').selectOption('Attachment');
+  await casePage.getByLabel('Modification type').selectOption('Attachment');
   assert.equal(await timeline.locator('.tc-mod-entry').count(), 1);
   assert.match(await active.innerText(), /Mar 22, 2026, 10:30 PM/);
 
@@ -407,7 +410,7 @@ browserTest('case selection opens Details and the history tabs preserve executio
   assert.equal(await page.locator('#tcHistoryFrom').inputValue(), '');
   await mods.click();
   assert.equal(calls.filter(([url]) => url.endsWith('/modification-history')).length, 1);
-  assert.equal(await page.getByLabel('Modified by').inputValue(), 'joy');
+  assert.equal(await casePage.getByLabel('Modified by').inputValue(), 'joy');
 
   await page.getByRole('tab', { name: 'Details', exact: true }).click();
   assert.match(await page.locator('.tc-planning').innerText(), /Activated Date\s+Mar 23, 2026, 6:59 PM/);
@@ -432,4 +435,70 @@ browserTest('modification history displays loading, retry and empty states', asy
   mocks.modifications = (route) => route.fulfill({ json: { updates: [] } });
   await page.locator('#tcModHistoryRetry').click();
   await page.getByText('No modification history returned by ADO for this test case.').waitFor();
+});
+
+browserTest('searches Post Development Bugs and opens their modification history and related items', async ({ page, mocks, calls }) => {
+  const titles = { 42: 'Flowsheet issue', 64: 'Another bug' };
+  const root = '/api/work-items/post-development-bugs';
+  let search;
+  mocks.bug = (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path.endsWith('/search')) {
+      search = route.request().postDataJSON();
+      return route.fulfill({ json: { bugs: [42, 64].map((id) => ({ id, title: titles[id], state: 'Closed' })) } });
+    }
+    if (path.endsWith('/modification-history')) {
+      return route.fulfill({ json: { updates: [{
+        id: 1, revision: 1, created: true, changedAt: '2026-03-23T22:59:39Z',
+        author: 'QA', authorId: 'qa', fields: [], relations: [],
+      }] } });
+    }
+    if (path.endsWith('/links')) {
+      return route.fulfill({ json: { links: path.includes('/64/') ? [] : [{
+        id: 43, type: 'System.LinkTypes.Related', url: 'https://dev.azure.com/org/QA/_workitems/edit/43',
+        title: 'Linked bug', state: 'Closed', changedAt: '2026-03-23T22:59:39Z', comment: 'Verified',
+      }] } });
+    }
+    const id = Number(path.split('/').pop());
+    return route.fulfill({ json: {
+      id, title: titles[id], url: 'https://dev.azure.com/org/QA/_workitems/edit/' + id, linkCount: id === 42 ? 1 : 0,
+      fields: [
+        { name: 'State', referenceName: 'System.State', value: 'Closed' },
+        { name: 'Repro Steps', referenceName: 'Microsoft.VSTS.TCM.ReproSteps', value: '<p>Open the flowsheet.</p>' },
+        { name: 'Tags', referenceName: 'System.Tags', value: 'Flowsheet; Regression' },
+      ],
+    } });
+  };
+  await page.getByRole('tab', { name: 'Work Items', exact: true }).click();
+  await page.locator('[data-work-tab="post-development-bug"]').click();
+  const bug = page.locator('[data-work-page="post-development-bug"]');
+  await bug.getByLabel('Search by').selectOption('title');
+  await bug.getByLabel('Match').selectOption('flexible');
+  await bug.getByLabel('Search value').fill('flowsheet');
+  await bug.getByRole('button', { name: 'Search', exact: true }).click();
+  await bug.getByRole('radio', { name: /Select post development bug 42/ }).check();
+  await bug.getByRole('tabpanel', { name: 'Details', exact: true }).getByText('Open the flowsheet.').waitFor();
+  assert.deepEqual(search, { field: 'title', mode: 'flexible', query: 'flowsheet' });
+  assert.deepEqual(calls.filter(([url]) => url.startsWith(root)).map(([url]) => url), [
+    root + '/search', root + '/42',
+  ]);
+  assert.equal(await bug.getByRole('tab', { name: 'Execution History' }).count(), 0);
+  await bug.getByRole('tab', { name: 'Modification History' }).click();
+  await bug.getByRole('region', { name: 'Revision details' }).getByText('Created Post Development Bug').waitFor();
+  await bug.getByRole('button', { name: 'Choose modification date range' }).click();
+  await bug.getByRole('dialog', { name: 'Date range' }).waitFor();
+  await bug.getByRole('button', { name: 'Done', exact: true }).click();
+
+  await bug.getByRole('tab', { name: 'Links (1)' }).click();
+  const related = bug.getByRole('table', { name: 'Related' });
+  const link = related.getByRole('link', { name: '43 Linked bug' });
+  assert.equal(await link.getAttribute('href'), 'https://dev.azure.com/org/QA/_workitems/edit/43');
+  assert.equal(await link.getAttribute('target'), '_blank');
+  assert.match(await related.innerText(), /Closed\s+Mar 23, 2026, 6:59 PM\s+Verified/);
+
+  await bug.getByRole('radio', { name: /Select post development bug 64/ }).check();
+  await bug.getByRole('heading', { name: 'Another bug' }).waitFor();
+  assert.equal(await bug.getByRole('tab', { name: 'Details', exact: true }).getAttribute('aria-selected'), 'true');
+  await bug.getByRole('tab', { name: 'Links (0)' }).click();
+  await bug.getByText('This bug has no links.').waitFor();
 });
