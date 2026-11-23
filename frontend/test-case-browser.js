@@ -213,7 +213,17 @@
       const list = node('dl', null, 'tc-field-list');
       entries.forEach((entry) => { const term = node('dt', entry.name); term.title = entry.referenceName;
         const detail = node('dd');
-        if (acceptedDateField(entry) || testCaseDateTime.isDateField(entry, entry.value)) {
+        if (entry.referenceName === 'System.Tags') {
+          const labels = String(entry.value ?? '').split(';').map((label) => label.trim()).filter(Boolean);
+          if (labels.length) {
+            const tags = node('ul', null, 'tc-tags');
+            tags.setAttribute('role', 'list');
+            labels.forEach((label) => tags.appendChild(node('li', label, 'tc-tag')));
+            detail.appendChild(tags);
+          } else {
+            detail.textContent = '—';
+          }
+        } else if (acceptedDateField(entry) || testCaseDateTime.isDateField(entry, entry.value)) {
           detail.textContent = testCaseDateTime.format(entry.value, text(entry.value));
           if (entry.value) detail.title = text(entry.value);
         } else {

@@ -59,6 +59,7 @@ const browserTest = (name, run) => test(name, { skip: !chromium && 'Enable real-
       id: 11, title: 'Test case 11', url: 'https://dev.azure.com/org/project/_workitems/edit/11',
       fields: [
         { name: 'State', referenceName: 'System.State', value: 'Design' },
+        { name: 'Tags', referenceName: 'System.Tags', value: 'fixed-created-date; PI20; ; TC Migration Batch 2; V15 New Feature;' },
         { name: 'Activated Date', referenceName: 'Microsoft.VSTS.Common.ActivatedDate', type: 'dateTime', value: '2026-03-23T22:59:39.49Z' },
         { name: 'Target Date', referenceName: 'Custom.TargetDate', value: '2026-03-23' },
       ], steps: mocks.steps, stepsWarning: mocks.stepsWarning,
@@ -411,6 +412,11 @@ browserTest('case selection opens Details and the history tabs preserve executio
   await page.getByRole('tab', { name: 'Details', exact: true }).click();
   assert.match(await page.locator('.tc-planning').innerText(), /Activated Date\s+Mar 23, 2026, 6:59 PM/);
   assert.match(await page.locator('.tc-planning').innerText(), /Target Date\s+Mar 23, 2026/);
+  const chips = page.locator('.tc-tags');
+  assert.deepEqual(await chips.getByRole('listitem').allTextContents(), [
+    'fixed-created-date', 'PI20', 'TC Migration Batch 2', 'V15 New Feature',
+  ]);
+  assert.equal(await chips.evaluate((list) => getComputedStyle(list).flexWrap), 'wrap');
 });
 
 browserTest('modification history displays loading, retry and empty states', async ({ page, mocks }) => {

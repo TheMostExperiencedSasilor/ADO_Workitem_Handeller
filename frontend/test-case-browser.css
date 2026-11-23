@@ -37,6 +37,11 @@
 .tc-field-list { margin: 0; }
 .tc-field-list dt { color: var(--muted); font-size: 13px; margin-top: 15px; }
 .tc-field-list dd { margin: 5px 0 0; overflow-wrap: anywhere; }
+.tc-tags { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.tc-tag {
+  min-width: 0; max-width: 100%; padding: 3px 10px; border-radius: 999px;
+  background: #eee; font-size: 13px; line-height: 1.4;
+}
 .tc-rich { line-height: 1.6; overflow-wrap: anywhere; }
 .tc-rich p:first-child { margin-top: 0; }
 .tc-rich p:last-child { margin-bottom: 0; }
