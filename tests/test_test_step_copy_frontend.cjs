@@ -37,7 +37,7 @@ const browserTest = (name, run) => test(name, { skip: !chromium && 'Enable real-
   steps[0].action = '<p>Step 1: Open <LNG Section> &amp; Load Sample.hsc</p><p>Choose <b>Plots</b><br>Compare X | Y.</p>';
   steps[0].expected = '<div>Lists match<br>Keep A &lt; B.</div>';
   steps[1].number = '1.1';
-  steps[1].action = '<ol><li><div>Inspect <Flow Rate></div></li><li>Use <sample.hsc>.</li></ol>';
+  steps[1].action = '<ol><li><div>Inspect <Flow Rate></div></li><li>Use <sample.hsc> for <<1st LNG>>.</li></ol>';
   const mocks = {
     steps, stepsWarning: '',
     chat: (route) => route.fulfill({ json: { answer: 'Draft', contextIds: [] } }),
@@ -100,12 +100,12 @@ browserTest('normalizes ADO text and exports correct Markdown for one row and al
     expected: 'Lists match\nKeep A < B.',
   });
   assert.deepEqual(plain[1], {
-    step: '1.1', action: '1. Inspect <Flow Rate>\n2. Use <sample.hsc>.', expected: '',
+    step: '1.1', action: '1. Inspect <Flow Rate>\n2. Use <sample.hsc> for <<1st LNG>>.', expected: '',
   });
   const lines = markdown.split('\n');
   assert.deepEqual(lines.slice(0, 2), ['| Step | Action | Expected result |', '|---|---|---|']);
-  assert.equal(lines[2], '| 1 | Open &lt;LNG Section&gt; &amp; Load Sample.hsc<br>Choose Plots<br>Compare X \\| Y. | Lists match<br>Keep A &lt; B. |');
-  assert.equal(lines[3], '| 1.1 | 1. Inspect &lt;Flow Rate&gt;<br>2. Use &lt;sample.hsc&gt;. | |');
+  assert.equal(lines[2], '| 1 | Open \\<LNG Section\\> &amp; Load Sample.hsc<br>Choose Plots<br>Compare X \\| Y. | Lists match<br>Keep A \\< B. |');
+  assert.equal(lines[3], '| 1.1 | 1. Inspect \\<Flow Rate\\><br>2. Use \\<sample.hsc\\> for \\<\\<1st LNG\\>\\>. | |');
   assert.equal(lines.length, 552);
   assert.equal(lines.at(-1), '| 550 | Load case 550.hsc | |');
 
@@ -113,7 +113,7 @@ browserTest('normalizes ADO text and exports correct Markdown for one row and al
     action: '<div><P> &lt;VAPOUR&gt; &amp;lt; &nbsp; _X_ [Y] *Z* ~α~ `tag`</div><script>remove me</script>2.5 bar',
     expected: '<ul><li>Ready</li><li>Verify ≥ 1 &deg;C</li></ul>',
   }])));
-  assert.ok(special.includes('&lt;P&gt; &lt;VAPOUR&gt; &amp;lt; \\_X\\_ \\[Y\\] \\*Z\\* \\~α\\~ \\`tag\\`<br>2.5 bar'));
+  assert.ok(special.includes('\\<P\\> \\<VAPOUR\\> &amp;lt; \\_X\\_ \\[Y\\] \\*Z\\* \\~α\\~ \\`tag\\`<br>2.5 bar'));
   assert.ok(special.endsWith('| - Ready<br>- Verify ≥ 1 °C |'));
   assert.ok(!special.includes('remove me'));
 });
@@ -134,7 +134,7 @@ browserTest('row copy is hover and keyboard accessible, and the modal traps focu
   assert.equal(await first.locator('svg').count(), 1);
   await first.click();
   assert.equal((await clipboard(page)).split('\n').length, 3);
-  assert.match(await clipboard(page), /\| 1 \| Open &lt;LNG Section&gt;/);
+  assert.match(await clipboard(page), /\| 1 \| Open \\<LNG Section\\>/);
   await page.getByText('Step 1 copied.', { exact: true }).waitFor();
   await all.hover();
   await all.focus();
@@ -233,6 +233,7 @@ browserTest('AI failures preserve edits, retries use the selected model, and dra
   assert.equal(await version.inputValue(), 'ai');
   const aiDraft = await edit.inputValue();
   assert.match(aiDraft, /Verified in Copilot draft/);
+  assert.match(aiDraft, /for \\<\\<1st LNG\\>\\>/);
   await edit.fill('My AI draft');
   await version.selectOption('original');
   assert.equal(await edit.inputValue(), 'My original draft');
