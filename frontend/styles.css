@@ -611,6 +611,9 @@ pre {
 .chatbox { width: min(480px, calc(100vw - 32px)); height: min(700px, calc(100dvh - 120px)); grid-template-rows: auto auto minmax(80px, 1fr) auto; }
 .chat-options { padding: 0 14px 8px; border-bottom: 1px solid var(--border); max-height: 240px; overflow: auto; }
 .chat-options label { margin-top: 8px; font-size: 12px; }
+.chat-options .chat-current-item { display: flex; align-items: center; gap: 7px; }
+.chat-current-item input { width: auto; margin: 0; accent-color: var(--accent); }
+#chatCurrentWorkItemHint { overflow-wrap: anywhere; }
 .chat-options p { margin: 8px 0; }
 .chat-options button { margin: 0; padding: 5px 10px; }
 .chatbox button:disabled { opacity: .5; cursor: not-allowed; }

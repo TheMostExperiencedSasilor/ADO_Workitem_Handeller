@@ -411,3 +411,68 @@ def test_step_comparison_handles_empty_unreadable_missing_identity_and_shared_st
     assert comparison['note']
     assert any(row['after'] and '#200' in row['after']['action'] for row in comparison['changes'])
     assert any(row['before'] and '#100' in row['before']['action'] for row in comparison['changes'])
+
+
+def test_post_development_bug_routes_search_details_history_and_links(browser, monkeypatch):
+    from services.post_development_bug_browser import PostDevelopmentBugBrowser
+
+    app = create_app()
+    api = app.test_client()
+    bug = item(42, 'Flowsheet issue', kind='Post Development Bug')
+    bug['relations'] = [
+        {'rel': 'System.LinkTypes.Related', 'url': 'https://dev.azure.com/org/_apis/wit/workItems/43',
+         'attributes': {'comment': 'Verified'}},
+        {'rel': 'System.LinkTypes.Hierarchy-Reverse', 'url': 'https://org.visualstudio.com/QA/_apis/wit/workItems/44'},
+        {'rel': 'Hyperlink', 'url': 'https://example.test/doc'},
+        {'rel': 'Hyperlink', 'url': 'javascript:alert(1)'},
+        {'rel': 'AttachedFile', 'url': 'https://dev.azure.com/org/_apis/wit/attachments/asset'},
+    ]
+    def work_items(ids):
+        return [entry for entry in [bug, item(45, kind='Bug')] if entry['id'] in ids]
+    browser.client.read_work_items = Mock(side_effect=work_items)
+    monkeypatch.setattr('routes.work_item_routes.get_ado_client', lambda: browser.client)
+    post = Mock(return_value={'workItems': [{'id': 42}, {'id': 45}]})
+    monkeypatch.setattr(PostDevelopmentBugBrowser, '_post', post)
+    get = Mock(side_effect=[
+        {'value': [{'id': 1, 'workItemId': 42, 'rev': 1}]},
+        {'value': [{'id': 43, 'fields': {'System.Title': 'Linked bug', 'System.State': 'Closed',
+                    'System.TeamProject': 'Other Project', 'System.ChangedDate': '2026-03-23T22:59:39Z'}}]},
+    ])
+    monkeypatch.setattr(PostDevelopmentBugBrowser, '_get', get)
+    monkeypatch.setattr('services.test_case_browser.requests.get', Mock(return_value=response({'value': []})))
+
+    root = '/api/work-items/post-development-bugs'
+    search = api.post(root + '/search', json={'field': 'title', 'mode': 'flexible', 'query': 'flowsheet'})
+    assert [result['id'] for result in search.json['bugs']] == [42]
+    assert "[System.WorkItemType] = 'Post Development Bug'" in post.call_args.args[1]['query']
+    post.return_value = {'workItems': [{'id': 42}]}
+    lookup = api.post(root + '/search', json={'query': '42'})
+    assert [result['id'] for result in lookup.json['bugs']] == [42]
+    assert '[System.Id] = 42' in post.call_args.args[1]['query']
+    assert api.get(root + '/45').status_code == 404
+    detail = api.get(root + '/42').json
+    assert detail['title'] == 'Flowsheet issue' and detail['linkCount'] == 4
+    history = api.get(root + '/42/modification-history')
+    assert history.json['updates'][0]['created']
+    links = api.get(root + '/42/links').json['links']
+    assert links[0]['title'] == 'Linked bug'
+    assert links[0]['state'] == 'Closed' and links[0]['comment'] == 'Verified'
+    assert links[0]['url'] == 'https://dev.azure.com/org/Other%20Project/_workitems/edit/43'
+    assert links[1]['id'] == 44 and links[1]['title'] is None
+    assert links[1]['url'] == 'https://dev.azure.com/org/_workitems/edit/44'
+    assert links[2]['url'] == 'https://example.test/doc' and links[3]['url'] is None
+    assert get.call_args.args[0] == 'wit/workitems'
+    assert get.call_args.args[1]['ids'] == '43,44'
+    assert get.call_args.args[1]['errorPolicy'] == 'Omit'
+
+
+def test_bug_links_only_resolve_connected_organization():
+    from services.post_development_bug_browser import work_item_target
+
+    assert work_item_target('https://dev.azure.com/ORG/QA%20Project/_workitems/edit/123', 'org') == 123
+    assert work_item_target('https://org.visualstudio.com/_apis/wit/workItems/123', 'org') == 123
+    for url in ['https://dev.azure.com/other/_apis/wit/workItems/123',
+                'https://org.visualstudio.com.example.test/_apis/wit/workItems/123',
+                'https://user@dev.azure.com/org/_apis/wit/workItems/123',
+                'https://dev.azure.com/org/_apis/wit/workItems/0']:
+        assert work_item_target(url, 'org') is None

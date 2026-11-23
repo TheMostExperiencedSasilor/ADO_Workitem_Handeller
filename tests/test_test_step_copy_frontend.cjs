@@ -37,9 +37,11 @@ const browserTest = (name, run) => test(name, { skip: !chromium && 'Enable real-
   steps[0].action = '<p>Step 1: Open <LNG Section> &amp; Load Sample.hsc</p><p>Choose <b>Plots</b><br>Compare X | Y.</p>';
   steps[0].expected = '<div>Lists match<br>Keep A &lt; B.</div>';
   steps[1].number = '1.1';
-  steps[1].action = '<ol><li><div>Inspect <Flow Rate></div></li><li>Use <sample.hsc>.</li></ol>';
+  steps[1].action = '<ol><li><div>Inspect <Flow Rate></div></li><li>Use <sample.hsc> for <<1st LNG>>.</li></ol>';
   const mocks = {
     steps, stepsWarning: '',
+    chat: (route) => route.fulfill({ json: { answer: 'Draft', contextIds: [] } }),
+    bug: (route) => route.fulfill({ status: 404, json: { error: 'Bug fixture not configured.' } }),
     modifications: (route) => route.fulfill({ json: { updates: [] } }),
     executions: (route) => route.fulfill({ json: { history: [], nextSkip: null } }),
     rewrite: (route) => route.fulfill({ json: { steps: [] } }),
@@ -48,10 +50,12 @@ const browserTest = (name, run) => test(name, { skip: !chromium && 'Enable real-
     const request = route.request();
     const url = new URL(request.url()).pathname;
     calls.push([url, request.method()]);
+    if (url === '/api/chat') return mocks.chat(route);
     if (url === '/api/chat/rewrite-test-steps') return mocks.rewrite(route);
     if (url === '/api/chat/status') return route.fulfill({ json: {
       connected: true, models: [{ id: 'luna', name: 'Luna' }, { id: 'other', name: 'Other' }],
     } });
+    if (url.includes('/post-development-bugs/')) return mocks.bug(route);
     if (url.endsWith('/modification-history')) return mocks.modifications(route);
     if (url.endsWith('/history')) return mocks.executions(route);
     if (url.endsWith('/search')) return route.fulfill({ json: { testCases } });
@@ -59,6 +63,7 @@ const browserTest = (name, run) => test(name, { skip: !chromium && 'Enable real-
       id: 11, title: 'Test case 11', url: 'https://dev.azure.com/org/project/_workitems/edit/11',
       fields: [
         { name: 'State', referenceName: 'System.State', value: 'Design' },
+        { name: 'Tags', referenceName: 'System.Tags', value: 'fixed-created-date; PI20; ; TC Migration Batch 2; V15 New Feature;' },
         { name: 'Activated Date', referenceName: 'Microsoft.VSTS.Common.ActivatedDate', type: 'dateTime', value: '2026-03-23T22:59:39.49Z' },
         { name: 'Target Date', referenceName: 'Custom.TargetDate', value: '2026-03-23' },
       ], steps: mocks.steps, stepsWarning: mocks.stepsWarning,
@@ -80,7 +85,6 @@ async function openCase(page) {
 
 async function selectCase(page) {
   await openCase(page);
-  await page.getByRole('tab', { name: 'Details', exact: true }).click();
   await page.getByRole('button', { name: 'Copy All Steps' }).waitFor();
 }
 
@@ -96,12 +100,12 @@ browserTest('normalizes ADO text and exports correct Markdown for one row and al
     expected: 'Lists match\nKeep A < B.',
   });
   assert.deepEqual(plain[1], {
-    step: '1.1', action: '1. Inspect <Flow Rate>\n2. Use <sample.hsc>.', expected: '',
+    step: '1.1', action: '1. Inspect <Flow Rate>\n2. Use <sample.hsc> for <<1st LNG>>.', expected: '',
   });
   const lines = markdown.split('\n');
   assert.deepEqual(lines.slice(0, 2), ['| Step | Action | Expected result |', '|---|---|---|']);
-  assert.equal(lines[2], '| 1 | Open &lt;LNG Section&gt; &amp; Load Sample.hsc<br>Choose Plots<br>Compare X \\| Y. | Lists match<br>Keep A &lt; B. |');
-  assert.equal(lines[3], '| 1.1 | 1. Inspect &lt;Flow Rate&gt;<br>2. Use &lt;sample.hsc&gt;. | |');
+  assert.equal(lines[2], '| 1 | Open \\<LNG Section\\> &amp; Load Sample.hsc<br>Choose Plots<br>Compare X \\| Y. | Lists match<br>Keep A \\< B. |');
+  assert.equal(lines[3], '| 1.1 | 1. Inspect \\<Flow Rate\\><br>2. Use \\<sample.hsc\\> for \\<\\<1st LNG\\>\\>. | |');
   assert.equal(lines.length, 552);
   assert.equal(lines.at(-1), '| 550 | Load case 550.hsc | |');
 
@@ -109,7 +113,7 @@ browserTest('normalizes ADO text and exports correct Markdown for one row and al
     action: '<div><P> &lt;VAPOUR&gt; &amp;lt; &nbsp; _X_ [Y] *Z* ~α~ `tag`</div><script>remove me</script>2.5 bar',
     expected: '<ul><li>Ready</li><li>Verify ≥ 1 &deg;C</li></ul>',
   }])));
-  assert.ok(special.includes('&lt;P&gt; &lt;VAPOUR&gt; &amp;lt; \\_X\\_ \\[Y\\] \\*Z\\* \\~α\\~ \\`tag\\`<br>2.5 bar'));
+  assert.ok(special.includes('\\<P\\> \\<VAPOUR\\> &amp;lt; \\_X\\_ \\[Y\\] \\*Z\\* \\~α\\~ \\`tag\\`<br>2.5 bar'));
   assert.ok(special.endsWith('| - Ready<br>- Verify ≥ 1 °C |'));
   assert.ok(!special.includes('remove me'));
 });
@@ -130,7 +134,7 @@ browserTest('row copy is hover and keyboard accessible, and the modal traps focu
   assert.equal(await first.locator('svg').count(), 1);
   await first.click();
   assert.equal((await clipboard(page)).split('\n').length, 3);
-  assert.match(await clipboard(page), /\| 1 \| Open &lt;LNG Section&gt;/);
+  assert.match(await clipboard(page), /\| 1 \| Open \\<LNG Section\\>/);
   await page.getByText('Step 1 copied.', { exact: true }).waitFor();
   await all.hover();
   await all.focus();
@@ -229,6 +233,7 @@ browserTest('AI failures preserve edits, retries use the selected model, and dra
   assert.equal(await version.inputValue(), 'ai');
   const aiDraft = await edit.inputValue();
   assert.match(aiDraft, /Verified in Copilot draft/);
+  assert.match(aiDraft, /for \\<\\<1st LNG\\>\\>/);
   await edit.fill('My AI draft');
   await version.selectOption('original');
   assert.equal(await edit.inputValue(), 'My original draft');
@@ -304,7 +309,7 @@ browserTest('keeps reopened drafts independent of pending and invalid AI results
   assert.equal(aiCalls(), 2);
 });
 
-browserTest('history tabs default to modifications and preserve execution filters and paging', async ({ page, calls, mocks }) => {
+browserTest('case selection opens Details and the history tabs preserve execution filters and paging', async ({ page, calls, mocks }) => {
   const update = (id, props) => ({ id, revision: id, author: 'Service Account', authorId: 'service',
     changedAt: '2026-03-22T10:00:00Z', fields: [], relations: [], ...props });
   const step = (action) => ({ number: '1', action, expected: 'Case loads' });
@@ -339,20 +344,26 @@ browserTest('history tabs default to modifications and preserve execution filter
     } });
   };
   await openCase(page);
+  const casePage = page.locator('[data-work-page="test-case"]');
   const mods = page.getByRole('tab', { name: 'Modification History', exact: true });
   const executions = page.getByRole('tab', { name: 'Execution History', exact: true });
   const timeline = page.getByRole('region', { name: 'Revision timeline' });
   const details = page.getByRole('region', { name: 'Revision details' });
   const active = timeline.locator('[aria-current="true"]');
+  await page.getByRole('tabpanel', { name: 'Details', exact: true }).waitFor();
+  assert.equal(await page.getByRole('tab', { name: 'Details', exact: true }).getAttribute('aria-selected'), 'true');
+  assert.equal(await mods.getAttribute('aria-selected'), 'false');
+  assert.equal(calls.filter(([url]) => url.includes('history')).length, 0);
+  await mods.click();
   await details.getByText('Step 1 updated').waitFor();
   assert.equal(await mods.getAttribute('aria-selected'), 'true');
-  assert.deepEqual(await page.locator('.tc-icon-tab').evaluateAll((tabs) => tabs.map(
+  assert.deepEqual(await casePage.locator('.tc-icon-tab').evaluateAll((tabs) => tabs.map(
     (tab) => [tab.getAttribute('aria-label'), tab.querySelector('svg').getAttribute('width')],
   )), [['Modification History', '20'], ['Execution History', '20']]);
   assert.equal(calls.filter(([url]) => url.endsWith('/history')).length, 0);
   await mods.hover();
   assert.equal(await mods.locator('.tc-tab-tooltip').isVisible(), true);
-  const border = () => page.locator('.tc-icon-tab').evaluateAll((tabs) => tabs.map(
+  const border = () => casePage.locator('.tc-icon-tab').evaluateAll((tabs) => tabs.map(
     (tab) => getComputedStyle(tab).borderBottomColor,
   ));
   const [blue, transparent] = await border();
@@ -372,9 +383,9 @@ browserTest('history tabs default to modifications and preserve execution filter
   await timeline.getByRole('button', { name: 'Next revision page' }).click();
   assert.match(await timeline.innerText(), /Page 2 of 2/);
   assert.equal(await timeline.locator('.tc-mod-entry').count(), 5);
-  await page.getByLabel('Modified by').selectOption('joy');
+  await casePage.getByLabel('Modified by').selectOption('joy');
   assert.equal(await timeline.locator('.tc-mod-entry').count(), 2);
-  await page.getByLabel('Modification type').selectOption('Attachment');
+  await casePage.getByLabel('Modification type').selectOption('Attachment');
   assert.equal(await timeline.locator('.tc-mod-entry').count(), 1);
   assert.match(await active.innerText(), /Mar 22, 2026, 10:30 PM/);
 
@@ -402,11 +413,16 @@ browserTest('history tabs default to modifications and preserve execution filter
   assert.equal(await page.locator('#tcHistoryFrom').inputValue(), '');
   await mods.click();
   assert.equal(calls.filter(([url]) => url.endsWith('/modification-history')).length, 1);
-  assert.equal(await page.getByLabel('Modified by').inputValue(), 'joy');
+  assert.equal(await casePage.getByLabel('Modified by').inputValue(), 'joy');
 
   await page.getByRole('tab', { name: 'Details', exact: true }).click();
   assert.match(await page.locator('.tc-planning').innerText(), /Activated Date\s+Mar 23, 2026, 6:59 PM/);
   assert.match(await page.locator('.tc-planning').innerText(), /Target Date\s+Mar 23, 2026/);
+  const chips = page.locator('.tc-tags');
+  assert.deepEqual(await chips.getByRole('listitem').allTextContents(), [
+    'fixed-created-date', 'PI20', 'TC Migration Batch 2', 'V15 New Feature',
+  ]);
+  assert.equal(await chips.evaluate((list) => getComputedStyle(list).flexWrap), 'wrap');
 });
 
 browserTest('modification history displays loading, retry and empty states', async ({ page, mocks }) => {
@@ -415,10 +431,137 @@ browserTest('modification history displays loading, retry and empty states', asy
     finish = () => resolve(route.fulfill({ status: 403, json: { error: 'ADO access denied.' } }));
   });
   await openCase(page);
+  await page.getByRole('tab', { name: 'Modification History', exact: true }).click();
   await page.getByRole('progressbar', { name: 'Loading modification history' }).waitFor();
   await finish();
   await page.getByText('ADO access denied.').waitFor();
   mocks.modifications = (route) => route.fulfill({ json: { updates: [] } });
   await page.locator('#tcModHistoryRetry').click();
   await page.getByText('No modification history returned by ADO for this test case.').waitFor();
+});
+
+browserTest('searches Post Development Bugs and opens their modification history and related items', async ({ page, mocks, calls }) => {
+  const titles = { 42: 'Flowsheet issue', 64: 'Another bug' };
+  const root = '/api/work-items/post-development-bugs';
+  let search;
+  mocks.bug = (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path.endsWith('/search')) {
+      search = route.request().postDataJSON();
+      return route.fulfill({ json: { bugs: [42, 64].map((id) => ({ id, title: titles[id], state: 'Closed' })) } });
+    }
+    if (path.endsWith('/modification-history')) {
+      return route.fulfill({ json: { updates: [{
+        id: 1, revision: 1, created: true, changedAt: '2026-03-23T22:59:39Z',
+        author: 'QA', authorId: 'qa', fields: [], relations: [],
+      }] } });
+    }
+    if (path.endsWith('/links')) {
+      return route.fulfill({ json: { links: path.includes('/64/') ? [] : [{
+        id: 43, type: 'System.LinkTypes.Related', url: 'https://dev.azure.com/org/QA/_workitems/edit/43',
+        title: 'Linked bug', state: 'Closed', changedAt: '2026-03-23T22:59:39Z', comment: 'Verified',
+      }] } });
+    }
+    const id = Number(path.split('/').pop());
+    return route.fulfill({ json: {
+      id, title: titles[id], url: 'https://dev.azure.com/org/QA/_workitems/edit/' + id, linkCount: id === 42 ? 1 : 0,
+      fields: [
+        { name: 'State', referenceName: 'System.State', value: 'Closed' },
+        { name: 'Repro Steps', referenceName: 'Microsoft.VSTS.TCM.ReproSteps', value: '<p>Open the flowsheet.</p>' },
+        { name: 'Tags', referenceName: 'System.Tags', value: 'Flowsheet; Regression' },
+      ],
+    } });
+  };
+  await page.getByRole('tab', { name: 'Work Items', exact: true }).click();
+  await page.locator('[data-work-tab="post-development-bug"]').click();
+  const bug = page.locator('[data-work-page="post-development-bug"]');
+  await bug.getByLabel('Search by').selectOption('title');
+  await bug.getByLabel('Match').selectOption('flexible');
+  await bug.getByLabel('Search value').fill('flowsheet');
+  await bug.getByRole('button', { name: 'Search', exact: true }).click();
+  await bug.getByRole('radio', { name: /Select post development bug 42/ }).check();
+  await bug.getByRole('tabpanel', { name: 'Details', exact: true }).getByText('Open the flowsheet.').waitFor();
+  assert.deepEqual(search, { field: 'title', mode: 'flexible', query: 'flowsheet' });
+  assert.deepEqual(calls.filter(([url]) => url.startsWith(root)).map(([url]) => url), [
+    root + '/search', root + '/42',
+  ]);
+  assert.equal(await bug.getByRole('tab', { name: 'Execution History' }).count(), 0);
+  await bug.getByRole('tab', { name: 'Modification History' }).click();
+  await bug.getByRole('region', { name: 'Revision details' }).getByText('Created Post Development Bug').waitFor();
+  await bug.getByRole('button', { name: 'Choose modification date range' }).click();
+  await bug.getByRole('dialog', { name: 'Date range' }).waitFor();
+  await bug.getByRole('button', { name: 'Done', exact: true }).click();
+
+  await bug.getByRole('tab', { name: 'Links (1)' }).click();
+  const related = bug.getByRole('table', { name: 'Related' });
+  const link = related.getByRole('link', { name: '43 Linked bug' });
+  assert.equal(await link.getAttribute('href'), 'https://dev.azure.com/org/QA/_workitems/edit/43');
+  assert.equal(await link.getAttribute('target'), '_blank');
+  assert.match(await related.innerText(), /Closed\s+Mar 23, 2026, 6:59 PM\s+Verified/);
+
+  await bug.getByRole('radio', { name: /Select post development bug 64/ }).check();
+  await bug.getByRole('heading', { name: 'Another bug' }).waitFor();
+  assert.equal(await bug.getByRole('tab', { name: 'Details', exact: true }).getAttribute('aria-selected'), 'true');
+  await bug.getByRole('tab', { name: 'Links (0)' }).click();
+  await bug.getByText('This bug has no links.').waitFor();
+});
+
+browserTest('Current Work Item follows the visible item and keeps conversation context scoped', async ({ page, mocks }) => {
+  const prompts = [];
+  mocks.chat = (route) => {
+    const prompt = route.request().postDataJSON();
+    prompts.push(prompt);
+    return route.fulfill({ json: { answer: `Draft ${prompts.length}`, contextIds: [Number(prompt.currentWorkItemId || prompt.ids[0])] } });
+  };
+  mocks.bug = (route) => {
+    const path = new URL(route.request().url()).pathname;
+    const bug = { id: 42, title: 'Flowsheet bug', fields: [], linkCount: 0, url: 'https://dev.azure.com/org/project/_workitems/edit/42' };
+    return route.fulfill({ json: path.endsWith('/search') ? { bugs: [bug] } : bug });
+  };
+  await selectCase(page);
+  await page.getByRole('button', { name: 'Open AI assistant' }).click();
+  const chat = page.locator('#chatbox');
+  const current = chat.getByRole('checkbox', { name: 'Current Work Item' });
+  const send = chat.getByRole('button', { name: 'Send', exact: true });
+  const prompt = chat.getByRole('textbox', { name: 'Your question' });
+  const manual = chat.getByRole('textbox', { name: /Attach ADO work-item IDs/ });
+  assert.equal(await current.isChecked(), false);
+  assert.match(await chat.locator('#chatCurrentWorkItemHint').innerText(), /#11 · Test case 11/);
+  await manual.fill('99');
+  await current.check();
+  assert.equal(await manual.isVisible(), false);
+
+  async function ask(question, count) {
+    await prompt.fill(question);
+    await send.click();
+    await chat.getByText(`Draft ${count}`, { exact: true }).waitFor();
+  }
+  await ask('Review the current steps', 1);
+  assert.equal(prompts[0].currentWorkItemId, '11');
+  assert.equal(prompts[0].ids, undefined);
+  await ask('Make the draft shorter', 2);
+  assert.equal(prompts[1].history.length, 2);
+
+  await page.locator('[data-work-tab="post-development-bug"]').click();
+  await prompt.fill('Now summarize this bug');
+  assert.equal(await send.isDisabled(), true);
+  assert.match(await chat.locator('#chatCurrentWorkItemHint').innerText(), /Open a work item/);
+  const bugPage = page.locator('[data-work-page="post-development-bug"]');
+  const bugSearch = bugPage.getByRole('searchbox', { name: 'Search value' });
+  await bugSearch.fill('42');
+  await bugSearch.press('Enter');
+  await bugPage.getByRole('radio', { name: /Select post development bug 42/ }).check();
+  await chat.getByText('#42 · Flowsheet bug', { exact: true }).waitFor();
+  await ask('Now summarize this bug', 3);
+  assert.equal(prompts[2].currentWorkItemId, '42');
+  assert.deepEqual(prompts[2].history, []);
+
+  await page.getByRole('tab', { name: 'Setup', exact: true }).click();
+  await prompt.fill('Question with an explicit ID');
+  assert.equal(await send.isDisabled(), true);
+  await current.uncheck();
+  assert.equal(await manual.inputValue(), '99');
+  await ask('Question with an explicit ID', 4);
+  assert.deepEqual(prompts[3].ids, ['99']);
+  assert.deepEqual(prompts[3].history, []);
 });

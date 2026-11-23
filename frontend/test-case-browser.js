@@ -1,11 +1,44 @@
-(() => {
-  const $ = (id) => document.getElementById(id);
+function mountPostDevelopmentBugBrowser() {
+  const target = document.querySelector?.('[data-work-page="post-development-bug"]');
+  const source = document.querySelector?.('[data-work-page="test-case"]');
+  if (!target || !source) return null;
+
+  const view = document.createDocumentFragment();
+  for (const element of source.children) {
+    if (!element.matches('.work-page-heading')) view.appendChild(element.cloneNode(true));
+  }
+  for (const id of ['tcAutomation', 'tcAutomationTab', 'tcHistory', 'tcHistoryTab']) view.querySelector('#' + id).remove();
+
+  const links = target.querySelector('#pdbLinkView').content.cloneNode(true);
+  view.querySelector('.tc-tabs').appendChild(links.querySelector('#tcLinksTab'));
+  view.querySelector('#tcSelected').insertBefore(links.querySelector('#tcLinks'), view.querySelector('#tcHistoryCalendar'));
+
+  for (const element of view.querySelectorAll('[id], [aria-controls], [aria-labelledby], [aria-label]')) {
+    for (const attribute of ['id', 'aria-controls', 'aria-labelledby']) {
+      const value = element.getAttribute(attribute);
+      if (value) element.setAttribute(attribute, value.replace(/\btc(?=[A-Z])/g, 'pdb'));
+    }
+    const label = element.getAttribute('aria-label');
+    if (label) element.setAttribute('aria-label', label.replace(/test case/gi, 'post development bug'));
+  }
+  view.querySelector('caption').textContent = 'Search results — select one post development bug';
+  target.appendChild(view);
+  return target;
+}
+
+function initializeWorkItemBrowser(bugPage = null) {
+  const isBug = Boolean(bugPage);
+  const itemName = isBug ? 'Post Development Bug' : 'Test Case';
+  const itemLabel = itemName.toLowerCase();
+  const api = '/api/work-items/' + (isBug ? 'post-development-bugs' : 'test-cases');
+  const $ = (id) => document.getElementById(isBug ? id.replace(/^tc/, 'pdb') : id);
   if (!$('tcSearch')) return;
   const state = { results: [], page: 0, selected: null, version: 0, searchVersion: 0,
     historyLoaded: false, historyBusy: false, nextSkip: null, historyRows: [], historyPage: 0,
     historyError: '', historyPageMessage: '', historyWarnings: new Set(), historyFilterError: '' };
   const pageSize = 10;
-  const tabs = [...document.querySelectorAll('[data-tc-tab]')];
+  let linksLoaded = false, linksLoading = false;
+  const tabs = [...(bugPage ? bugPage.querySelectorAll('[data-tc-tab]') : document.querySelectorAll('[data-tc-tab]:not([id^=pdb])'))];
   const text = (value) => {
     if (value == null || value === '') return '—';
     if (typeof value === 'object') return value.displayName || value.uniqueName || value.name || JSON.stringify(value);
@@ -25,9 +58,9 @@
     const response = await fetch(url, { ...options, headers: { 'Content-Type': 'application/json' }, cache: 'no-store' });
     const data = await response.json().catch(() => ({}));
     if (response.status === 405 || (response.status === 500 && /405 Method Not Allowed/i.test(data.error || ''))) {
-      throw new Error('The running backend does not support this Test Case request. Stop and relaunch the app after updating, then reconnect to ADO. Refreshing the browser alone will not load the new backend.');
+      throw new Error(`The running backend does not support this ${itemName} request. Stop and relaunch the app after updating, then reconnect to ADO. Refreshing the browser alone will not load the new backend.`);
     }
-    if (!response.ok) throw new Error(data.error || 'Could not load test case data.');
+    if (!response.ok) throw new Error(data.error || `Could not load ${itemLabel} data.`);
     return data;
   }
   // Rebuild a small HTML allowlist. ADO descriptions/steps are untrusted rich text.
@@ -65,6 +98,7 @@
     });
     if (activeRange?.panel !== panelId) closeCalendar(false);
     if (panelId === 'tcModHistory') modifications.load();
+    if (panelId === 'tcLinks') loadLinks();
     if (panelId === 'tcHistory' && !state.historyLoaded && !state.historyBusy) loadHistory(true);
   }
   tabs.forEach((tab, index) => {
@@ -79,10 +113,10 @@
   });
   function help() {
     const id = $('tcField').value === 'id';
-    $('tcQuery').placeholder = id ? 'Enter a test case ID' : 'For example: HYSYS MCP';
+    $('tcQuery').placeholder = id ? `Enter a ${itemLabel} ID` : isBug ? 'Enter a bug title' : 'For example: HYSYS MCP';
     $('tcQuery').inputMode = id ? 'numeric' : 'text';
     $('tcSearchHelp').textContent = id
-      ? 'Exact ID finds one test case. Flexible ID matches the starting digits; spaces are ignored.'
+      ? `Exact ID finds one ${itemLabel}. Flexible ID matches the starting digits; spaces are ignored.`
       : 'Flexible title: phrase at the start → phrase anywhere → all words in the same order. Exact match uses the full title (case-insensitive).';
   }
   $('tcField').addEventListener('change', help);
@@ -93,9 +127,9 @@
       const row = node('tr');
       row.classList.toggle('tc-selected-row', state.selected === item.id);
       const input = document.createElement('input');
-      input.type = 'radio'; input.name = 'tcSelection'; input.value = String(item.id);
+      input.type = 'radio'; input.name = isBug ? 'pdbSelection' : 'tcSelection'; input.value = String(item.id);
       input.checked = state.selected === item.id;
-      input.setAttribute('aria-label', `Select test case ${item.id}: ${item.title}`);
+      input.setAttribute('aria-label', `Select ${itemLabel} ${item.id}: ${item.title}`);
       input.addEventListener('change', () => selectCase(item.id));
       const cell = node('td'); cell.appendChild(input); row.appendChild(cell);
       for (const key of ['id', 'title', 'state', 'assignedTo']) row.appendChild(node('td', text(item[key])));
@@ -103,7 +137,7 @@
       $('tcResultRows').appendChild(row);
     });
     $('tcResults').hidden = state.results.length === 0;
-    $('tcPageInfo').textContent = `Page ${state.page + 1} of ${Math.max(1, Math.ceil(state.results.length / pageSize))} · ${state.results.length} test cases · select one`;
+    $('tcPageInfo').textContent = `Page ${state.page + 1} of ${Math.max(1, Math.ceil(state.results.length / pageSize))} · ${state.results.length} ${itemLabel}${state.results.length === 1 ? '' : 's'} · select one`;
     $('tcPrev').disabled = state.page === 0;
     $('tcNext').disabled = start + pageSize >= state.results.length;
   }
@@ -111,14 +145,24 @@
   $('tcNext').addEventListener('click', () => { state.page++; renderResults(); });
   function clearSelection() {
     closeCalendar(false); modifications.reset();
-    state.version++; state.selected = null; state.historyLoaded = false; state.historyBusy = false;
+    state.version++; state.selected = null;
+    $('tcSelected').hidden = true; $('tcDetailProgress').hidden = true;
+    message('tcDetailStatus', '');
+    if (isBug) {
+      linksLoaded = false; linksLoading = false;
+      $('tcLinksGroups').replaceChildren();
+      $('tcLinksRetry').hidden = true;
+      message('tcLinksStatus', '');
+      return;
+    }
+    state.historyLoaded = false; state.historyBusy = false;
     state.nextSkip = null; state.historyRows = [];
-    $('tcSelected').hidden = true; $('tcHistoryRows').replaceChildren();
+    $('tcHistoryRows').replaceChildren();
     $('tcHistoryMore').hidden = true; $('tcHistoryRefresh').disabled = false;
-    $('tcDetailProgress').hidden = true; $('tcHistoryProgress').hidden = true;
+    $('tcHistoryProgress').hidden = true;
     state.historyPage = 0; state.historyError = ''; state.historyPageMessage = ''; state.historyWarnings = new Set();
     historyFilterIds.forEach((id) => { $(id).value = ''; }); renderHistory();
-    message('tcDetailStatus', ''); message('tcHistoryStatus', 'Open Execution History to load execution results.');
+    message('tcHistoryStatus', 'Open Execution History to load execution results.');
   }
   $('tcSearch').addEventListener('submit', async (event) => {
     event.preventDefault();
@@ -126,14 +170,14 @@
     clearSelection(); state.results = []; state.page = 0; renderResults();
     $('tcSearchButton').disabled = true; $('tcSearch').setAttribute('aria-busy', 'true');
     $('tcSearchProgress').hidden = false;
-    message('tcSearchStatus', 'Searching ADO Test Cases…');
+    message('tcSearchStatus', `Searching ADO ${itemName}s…`);
     try {
-      const data = await request('/api/work-items/test-cases/search', { method: 'POST', body: JSON.stringify({
+      const data = await request(`${api}/search`, { method: 'POST', body: JSON.stringify({
         field: $('tcField').value, mode: $('tcMode').value, query: $('tcQuery').value,
       }) });
       if (version !== state.searchVersion) return;
-      state.results = data.testCases; renderResults();
-      message('tcSearchStatus', state.results.length ? `${state.results.length} test case${state.results.length === 1 ? '' : 's'} found. Select one to view.` : 'No matching Test Cases found.');
+      state.results = isBug ? data.bugs : data.testCases; renderResults();
+      message('tcSearchStatus', state.results.length ? `${state.results.length} ${itemLabel}${state.results.length === 1 ? '' : 's'} found. Select one to view.` : `No matching ${itemName}s found.`);
     } catch (error) {
       if (version === state.searchVersion) message('tcSearchStatus', error.message, true);
     } finally {
@@ -195,25 +239,51 @@
     const find = (...names) => fields.find((field) => names.some((name) => normalized(field.name) === normalized(name)
       || normalized(field.referenceName.split('.').pop()) === normalized(name)));
     const value = (...names) => find(...names)?.value;
-    $('tcSelectedId').textContent = `TEST CASE ${data.id}`;
+    $('tcSelectedId').textContent = `${itemName.toUpperCase()} ${data.id}`;
     $('tcSelectedTitle').textContent = data.title;
     $('tcSelectedMeta').textContent = `${text(value('State'))} · ${text(value('AssignedTo'))} · ${text(value('AreaPath'))}`;
     $('tcAdoLink').href = data.url;
-    $('tcDetails').replaceChildren(); $('tcAutomation').replaceChildren();
+    $('tcDetails').replaceChildren();
+    if (!isBug) $('tcAutomation').replaceChildren();
     const layout = node('div', null, 'tc-detail-layout');
     const main = node('div'); const planning = node('aside', null, 'tc-planning');
     const consumed = new Set(['System.Description', 'Microsoft.VSTS.TCM.Steps']);
     function section(parent, title, content) { const block = node('section', null, 'tc-section'); block.append(node('h4', title), content); parent.appendChild(block); }
     section(main, 'Description', rich(value('Description')));
-    const preconditions = find('PreConditions', 'Precondition', 'PreConditionsBlock');
-    if (preconditions) consumed.add(preconditions.referenceName);
-    section(main, 'Pre Conditions', rich(preconditions?.value));
-    section(main, 'Steps', data.steps.length ? renderSteps(data.steps, data.stepsWarning) : node('p', 'No steps provided.'));
+    if (isBug) {
+      for (const [label, names] of [
+        ['Repro Steps', ['Repro Steps', 'Reproduction Steps']],
+        ['System Info', ['System Info']],
+        ['Resolution', ['Resolution', 'Resolution Details']],
+      ]) {
+        const field = find(...names);
+        if (field?.value) {
+          consumed.add(field.referenceName);
+          section(main, label, rich(field.value));
+        }
+      }
+      setLinkCount(data.linkCount ?? 0);
+    } else {
+      const preconditions = find('PreConditions', 'Precondition', 'PreConditionsBlock');
+      if (preconditions) consumed.add(preconditions.referenceName);
+      section(main, 'Pre Conditions', rich(preconditions?.value));
+      section(main, 'Steps', data.steps.length ? renderSteps(data.steps, data.stepsWarning) : node('p', 'No steps provided.'));
+    }
     function fieldList(entries) {
       const list = node('dl', null, 'tc-field-list');
       entries.forEach((entry) => { const term = node('dt', entry.name); term.title = entry.referenceName;
         const detail = node('dd');
-        if (acceptedDateField(entry) || testCaseDateTime.isDateField(entry, entry.value)) {
+        if (entry.referenceName === 'System.Tags') {
+          const labels = String(entry.value ?? '').split(';').map((label) => label.trim()).filter(Boolean);
+          if (labels.length) {
+            const tags = node('ul', null, 'tc-tags');
+            tags.setAttribute('role', 'list');
+            labels.forEach((label) => tags.appendChild(node('li', label, 'tc-tag')));
+            detail.appendChild(tags);
+          } else {
+            detail.textContent = '—';
+          }
+        } else if (acceptedDateField(entry) || testCaseDateTime.isDateField(entry, entry.value)) {
           detail.textContent = testCaseDateTime.format(entry.value, text(entry.value));
           if (entry.value) detail.title = text(entry.value);
         } else {
@@ -222,30 +292,34 @@
         list.append(term, detail); });
       return list;
     }
-    const hiddenAutomation = fields.filter((field) => field.referenceName === 'Microsoft.VSTS.TCM.AutomationStatus'
-      || normalized(field.name) === 'automationstatus');
-    hiddenAutomation.forEach((field) => consumed.add(field.referenceName));
-    const automation = fields.filter((field) => !consumed.has(field.referenceName)
-      && /automat|testtool|scriptname|scriptlocation/i.test(field.name + field.referenceName));
-    automation.forEach((field) => consumed.add(field.referenceName));
-    section($('tcAutomation'), 'Associated Automation', fieldList(automation));
-    if (!automation.length) $('tcAutomation').appendChild(node('p', 'No automation details recorded.'));
-    const notes = find('Notes');
-    if (notes) { section($('tcAutomation'), 'Notes', rich(notes.value)); consumed.add(notes.referenceName); }
+    if (!isBug) {
+      const hiddenAutomation = fields.filter((field) => field.referenceName === 'Microsoft.VSTS.TCM.AutomationStatus'
+        || normalized(field.name) === 'automationstatus');
+      hiddenAutomation.forEach((field) => consumed.add(field.referenceName));
+      const automation = fields.filter((field) => !consumed.has(field.referenceName)
+        && /automat|testtool|scriptname|scriptlocation/i.test(field.name + field.referenceName));
+      automation.forEach((field) => consumed.add(field.referenceName));
+      section($('tcAutomation'), 'Associated Automation', fieldList(automation));
+      if (!automation.length) $('tcAutomation').appendChild(node('p', 'No automation details recorded.'));
+      const notes = find('Notes');
+      if (notes) { section($('tcAutomation'), 'Notes', rich(notes.value)); consumed.add(notes.referenceName); }
+    }
     const planningFields = fields.filter((field) => !consumed.has(field.referenceName)
       && !field.referenceName.startsWith('System.') && field.value !== '' && field.value != null);
     section(planning, 'Planning', fieldList(planningFields));
     section(planning, 'Classification', fieldList(fields.filter((field) => ['System.State', 'System.Reason', 'System.AssignedTo', 'System.AreaPath', 'System.IterationPath', 'System.Tags'].includes(field.referenceName))));
     layout.append(main, planning); $('tcDetails').appendChild(layout);
+    $('tcSelected').dataset.currentWorkItemId = String(data.id);
+    $('tcSelected').dataset.currentWorkItemTitle = data.title;
     $('tcSelected').hidden = false;
     modifications.reset(data.id, fields);
-    activateTab('tcModHistory');
+    activateTab('tcDetails');
   }
   async function selectCase(id) {
     clearSelection(); state.selected = id; const version = state.version;
-    renderResults(); $('tcDetailProgress').hidden = false; message('tcDetailStatus', `Loading Test Case ${id}…`);
+    renderResults(); $('tcDetailProgress').hidden = false; message('tcDetailStatus', `Loading ${itemName} ${id}…`);
     try {
-      const data = await request(`/api/work-items/test-cases/${id}`);
+      const data = await request(`${api}/${id}`);
       if (version !== state.version) return;
       renderCase(data); message('tcDetailStatus', data.warning || '');
     } catch (error) { if (version === state.version) message('tcDetailStatus', error.message, true); }
@@ -388,9 +462,9 @@
       },
     };
   }
-  const executionCalendar = bindCalendar('tcHistory', () => state.historyRows.find((row) => testCaseDateTime.parse(row.loggedDate))?.loggedDate, () => goHistory(0));
+  const executionCalendar = isBug ? null : bindCalendar('tcHistory', () => state.historyRows.find((row) => testCaseDateTime.parse(row.loggedDate))?.loggedDate, () => goHistory(0));
   const modificationCalendar = bindCalendar('tcModHistory', () => modifications.latest(), () => modifications.filter());
-  const modifications = createModificationHistory({ $, node, request, rich, syncCalendar: modificationCalendar.sync });
+  const modifications = createModificationHistory({ $, node, request, rich, syncCalendar: modificationCalendar.sync, api, itemName });
   $('tcCalendarPrev').addEventListener('click', () => moveCalendarMonth(-1));
   $('tcCalendarNext').addEventListener('click', () => moveCalendarMonth(1));
   $('tcCalendarMonth').addEventListener('change', () => {
@@ -475,29 +549,31 @@
       Boolean(state.historyError || state.historyFilterError || state.historyPageMessage));
   }
   function goHistory(page) { state.historyPage = page; state.historyPageMessage = ''; renderHistory(); }
-  $('tcHistoryFirst').addEventListener('click', () => goHistory(0));
-  $('tcHistoryPrev').addEventListener('click', () => goHistory(state.historyPage - 1));
-  $('tcHistoryNext').addEventListener('click', () => goHistory(state.historyPage + 1));
-  $('tcHistoryLast').addEventListener('click', () => goHistory(Math.ceil(filteredHistory().length / historySize()) - 1));
-  function typedHistoryPage() {
-    const page = Number($('tcHistoryPage').value), pages = Math.ceil(filteredHistory().length / historySize());
-    if (!Number.isInteger(page) || page < 1 || page > pages) {
-      state.historyPageMessage = 'Enter an available page number. Older pages may still be loading.'; renderHistory(); return;
+  if (!isBug) {
+    $('tcHistoryFirst').addEventListener('click', () => goHistory(0));
+    $('tcHistoryPrev').addEventListener('click', () => goHistory(state.historyPage - 1));
+    $('tcHistoryNext').addEventListener('click', () => goHistory(state.historyPage + 1));
+    $('tcHistoryLast').addEventListener('click', () => goHistory(Math.ceil(filteredHistory().length / historySize()) - 1));
+    function typedHistoryPage() {
+      const page = Number($('tcHistoryPage').value), pages = Math.ceil(filteredHistory().length / historySize());
+      if (!Number.isInteger(page) || page < 1 || page > pages) {
+        state.historyPageMessage = 'Enter an available page number. Older pages may still be loading.'; renderHistory(); return;
+      }
+      goHistory(page - 1);
     }
-    goHistory(page - 1);
+    $('tcHistoryGo').addEventListener('click', typedHistoryPage);
+    $('tcHistoryPage').addEventListener('keydown', (event) => { if (event.key === 'Enter') { event.preventDefault(); typedHistoryPage(); } });
+    $('tcHistoryPageSize').addEventListener('change', () => goHistory(0));
+    historyFilterIds.forEach((id) => $(id).addEventListener('input', () => {
+      if (id === 'tcHistoryFrom' || id === 'tcHistoryTo') executionCalendar.sync();
+      goHistory(0);
+    }));
+    $('tcHistoryClear').addEventListener('click', () => {
+      historyFilterIds.forEach((id) => { $(id).value = ''; });
+      executionCalendar.sync();
+      goHistory(0);
+    });
   }
-  $('tcHistoryGo').addEventListener('click', typedHistoryPage);
-  $('tcHistoryPage').addEventListener('keydown', (event) => { if (event.key === 'Enter') { event.preventDefault(); typedHistoryPage(); } });
-  $('tcHistoryPageSize').addEventListener('change', () => goHistory(0));
-  historyFilterIds.forEach((id) => $(id).addEventListener('input', () => {
-    if (id === 'tcHistoryFrom' || id === 'tcHistoryTo') executionCalendar.sync();
-    goHistory(0);
-  }));
-  $('tcHistoryClear').addEventListener('click', () => {
-    historyFilterIds.forEach((id) => { $(id).value = ''; });
-    executionCalendar.sync();
-    goHistory(0);
-  });
   async function loadHistory(reset = false) {
     if (!state.selected || state.historyBusy) return;
     const version = state.version;
@@ -528,7 +604,92 @@
       if (version === state.version) { state.historyBusy = false; renderHistory(); }
     }
   }
-  $('tcHistoryRefresh').addEventListener('click', () => loadHistory(true));
-  $('tcHistoryMore').addEventListener('click', () => loadHistory(false));
+  if (!isBug) {
+    $('tcHistoryRefresh').addEventListener('click', () => loadHistory(true));
+    $('tcHistoryMore').addEventListener('click', () => loadHistory(false));
+  } else {
+    $('tcLinksRetry').addEventListener('click', loadLinks);
+  }
+
+  function setLinkCount(count) {
+    $('tcLinksTab').setAttribute('aria-label', `Links (${count})`);
+    $('tcLinksCount').textContent = count ? String(count) : '';
+  }
+
+  function renderLinks(links) {
+    const labels = new Map([
+      ['System.LinkTypes.Related', 'Related'],
+      ['System.LinkTypes.Hierarchy-Forward', 'Child'],
+      ['System.LinkTypes.Hierarchy-Reverse', 'Parent'],
+      ['System.LinkTypes.Dependency-Forward', 'Successor'],
+      ['System.LinkTypes.Dependency-Reverse', 'Predecessor'],
+      ['Hyperlink', 'Hyperlink'],
+      ['ArtifactLink', 'Artifact'],
+    ]);
+    const groups = new Map();
+    for (const link of links) {
+      const group = labels.get(link.type) || link.type;
+      if (!groups.has(group)) groups.set(group, []);
+      groups.get(group).push(link);
+    }
+
+    const result = document.createDocumentFragment();
+    for (const [name, group] of groups) {
+      const wrap = node('div', null, 'tc-table-wrap tc-links-group');
+      const table = node('table', null, 'tc-table');
+      const head = node('thead');
+      const headings = node('tr');
+      for (const label of ['Link', 'State', 'Latest Update', 'Comment']) headings.appendChild(node('th', label));
+      head.appendChild(headings);
+      const body = node('tbody');
+      for (const link of group) {
+        const row = node('tr');
+        const linkCell = node('td');
+        const title = link.id == null ? link.name || link.url || name
+          : [link.id, link.title].filter(Boolean).join(' ');
+        if (/^https:\/\//i.test(link.url || '')) {
+          const anchor = node('a', title);
+          anchor.href = link.url; anchor.target = '_blank'; anchor.rel = 'noopener noreferrer';
+          linkCell.appendChild(anchor);
+        } else {
+          linkCell.textContent = title;
+        }
+        row.append(linkCell, node('td', text(link.state)),
+          node('td', testCaseDateTime.format(link.changedAt, '—')), node('td', text(link.comment)));
+        body.appendChild(row);
+      }
+      table.append(node('caption', name), head, body);
+      wrap.appendChild(table);
+      result.appendChild(wrap);
+    }
+    $('tcLinksGroups').replaceChildren(result);
+  }
+
+  async function loadLinks() {
+    if (!state.selected || linksLoaded || linksLoading) return;
+    const { version, selected } = state;
+    linksLoading = true;
+    $('tcLinksRetry').hidden = true;
+    message('tcLinksStatus', 'Loading links…');
+    try {
+      const { links } = await request(`${api}/${selected}/links`);
+      if (version !== state.version) return;
+      renderLinks(links);
+      setLinkCount(links.length);
+      message('tcLinksStatus', links.length ? '' : 'This bug has no links.');
+      linksLoaded = true;
+    } catch (error) {
+      if (version !== state.version) return;
+      message('tcLinksStatus', error.message, true);
+      $('tcLinksRetry').hidden = false;
+    } finally {
+      if (version === state.version) linksLoading = false;
+    }
+  }
+
   help();
-})();
+}
+
+initializeWorkItemBrowser();
+const postDevelopmentBugPage = mountPostDevelopmentBugBrowser();
+if (postDevelopmentBugPage) initializeWorkItemBrowser(postDevelopmentBugPage);

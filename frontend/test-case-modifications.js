@@ -1,4 +1,4 @@
-function createModificationHistory({ $, node, request, rich, syncCalendar }) {
+function createModificationHistory({ $, node, request, rich, syncCalendar, api, itemName }) {
   const element = (name) => $(`tcModHistory${name}`);
   const pageSize = 20;
   const filterNames = ['Author', 'Type', 'From', 'To'];
@@ -41,8 +41,8 @@ function createModificationHistory({ $, node, request, rich, syncCalendar }) {
     fieldChanges.forEach((change) => types.add(fieldTypes[change.field] || 'Fields'));
     update.relations.forEach((relation) => types.add(relationType(relation)));
     if (!types.size) types.add('Other');
-    let summary = 'Updated Test Case';
-    if (update.created) summary = 'Created Test Case';
+    let summary = `Updated ${itemName}`;
+    if (update.created) summary = `Created ${itemName}`;
     else if (update.relations.length === 1 && !fieldChanges.length) summary = relationLabel(update.relations[0]);
     else if (fieldChanges.length === 1 && !update.relations.length) summary = 'Changed ' + fieldChanges[0].label;
     else if (fieldChanges.length && !update.relations.length) summary = `Modified ${fieldChanges.length} fields`;
@@ -206,7 +206,7 @@ function createModificationHistory({ $, node, request, rich, syncCalendar }) {
     if (error) status.textContent = error;
     else if (busy) status.textContent = 'Loading modification history…';
     else if (invalidRange) status.textContent = 'From date must be on or before To date.';
-    else if (loaded && !rows.length) status.textContent = 'No modification history returned by ADO for this test case.';
+    else if (loaded && !rows.length) status.textContent = `No modification history returned by ADO for this ${itemName.toLowerCase()}.`;
     else if (loaded && !visible.length) status.textContent = 'No modifications match the current filters.';
     else status.textContent = '';
     element('').setAttribute('aria-busy', String(busy));
@@ -226,7 +226,7 @@ function createModificationHistory({ $, node, request, rich, syncCalendar }) {
       const button = node('button', null, 'tc-mod-entry');
       button.type = 'button';
       button.setAttribute('aria-current', String(row.id === selected));
-      button.setAttribute('aria-controls', 'tcModHistoryDetails');
+      button.setAttribute('aria-controls', element('Details').id);
       const label = node('span', null, 'tc-mod-entry-label');
       label.append(node('strong', row.author || 'Unknown author'), node('span', row.summary), time(row.changedAt));
       button.append(icon(row.types.values().next().value), label, node('span', revision(row), 'tc-mod-revision'));
@@ -274,7 +274,7 @@ function createModificationHistory({ $, node, request, rich, syncCalendar }) {
     busy = true;
     render();
     try {
-      const data = await request(`/api/work-items/test-cases/${caseId}/modification-history`);
+      const data = await request(`${api}/${caseId}/modification-history`);
       if (version !== loadVersion) return;
       if (!Array.isArray(data.updates)) throw new Error('ADO returned an invalid modification history response.');
       rows = data.updates.map(normalize).sort((a, b) => b.time - a.time || b.id - a.id);

@@ -195,14 +195,21 @@
 
       <div class="work-page" data-work-page="post-development-bug" role="tabpanel" hidden>
         <div class="work-page-heading">
-          <div><h3>Post Development Bug</h3><p>Page shell for bug triage after development work has started or completed.</p></div>
-          <span class="type-pill muted-pill">Page shell</span>
+          <div><h3>Post Development Bug</h3><p>Find a bug and review its details, changes, and linked work items.</p></div>
         </div>
-        <div class="page-block-grid">
-          <div class="page-block"><strong>Triage block</strong><span>Impact, severity, repro confidence, affected area.</span></div>
-          <div class="page-block"><strong>Root cause block</strong><span>Likely cause, changed behavior, suspected owner.</span></div>
-          <div class="page-block"><strong>Validation block</strong><span>Regression checks, evidence, close criteria.</span></div>
-        </div>
+        <template id="pdbLinkView">
+          <button id="tcLinksTab" class="tc-icon-tab" type="button" role="tab" aria-controls="tcLinks" aria-selected="false" tabindex="-1" aria-label="Links" data-tc-tab="tcLinks">
+            <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="m10 14 4-4m-5 7-1 1a4 4 0 0 1-5-5l4-4m8 6 4-4a4 4 0 0 0-5-5l-1 1"/></svg>
+            <span id="tcLinksCount" class="tc-link-count" aria-hidden="true"></span>
+            <span class="tc-tab-tooltip" aria-hidden="true">Links</span>
+          </button>
+          <div id="tcLinks" class="tc-content" role="tabpanel" aria-labelledby="tcLinksTab" hidden>
+            <div class="tc-history-heading"><h4>Links</h4></div>
+            <p id="tcLinksStatus" class="tc-hint" role="status"></p>
+            <button id="tcLinksRetry" type="button" hidden>Retry loading</button>
+            <div id="tcLinksGroups"></div>
+          </div>
+        </template>
       </div>
 
       <div class="work-page" data-work-page="task" role="tabpanel" hidden>
@@ -240,9 +247,9 @@
         <article id="tcSelected" hidden>
           <div class="tc-selected-heading"><div><span class="tc-eyebrow" id="tcSelectedId"></span><h3 id="tcSelectedTitle"></h3><p id="tcSelectedMeta"></p></div><a id="tcAdoLink" target="_blank" rel="noopener noreferrer">Open in ADO ↗</a></div>
           <div class="tc-tabs" role="tablist" aria-label="Selected test case">
-            <button id="tcDetailsTab" type="button" role="tab" aria-controls="tcDetails" aria-selected="false" tabindex="-1" data-tc-tab="tcDetails">Details</button>
+            <button id="tcDetailsTab" type="button" role="tab" aria-controls="tcDetails" aria-selected="true" data-tc-tab="tcDetails">Details</button>
             <button id="tcAutomationTab" type="button" role="tab" aria-controls="tcAutomation" aria-selected="false" tabindex="-1" data-tc-tab="tcAutomation">Automation</button>
-            <button id="tcModHistoryTab" class="tc-icon-tab" type="button" role="tab" aria-controls="tcModHistory" aria-selected="true" aria-label="Modification History" data-tc-tab="tcModHistory">
+            <button id="tcModHistoryTab" class="tc-icon-tab" type="button" role="tab" aria-controls="tcModHistory" aria-selected="false" tabindex="-1" aria-label="Modification History" data-tc-tab="tcModHistory">
               <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 1 2.5 6.2M3 12V5m0 7h7m2-5v5l3 2"/></svg>
               <span class="tc-tab-tooltip" aria-hidden="true">Modification History</span>
             </button>
@@ -251,9 +258,9 @@
               <span class="tc-tab-tooltip" aria-hidden="true">Execution History</span>
             </button>
           </div>
-          <div id="tcDetails" class="tc-content" role="tabpanel" aria-labelledby="tcDetailsTab" hidden></div>
+          <div id="tcDetails" class="tc-content" role="tabpanel" aria-labelledby="tcDetailsTab"></div>
           <div id="tcAutomation" class="tc-content" role="tabpanel" aria-labelledby="tcAutomationTab" hidden></div>
-          <div id="tcModHistory" class="tc-content" role="tabpanel" aria-labelledby="tcModHistoryTab">
+          <div id="tcModHistory" class="tc-content" role="tabpanel" aria-labelledby="tcModHistoryTab" hidden>
             <div class="tc-history-heading"><h4>Modification History</h4></div>
             <div class="tc-history-filters" role="group" aria-label="Filter modification history">
               <label>Modified by<select id="tcModHistoryAuthor"><option value="">Anyone</option></select></label>
@@ -417,9 +424,15 @@
       <p id="chatStatus" role="status" aria-live="polite">Connect to Copilot in Setup to start.</p>
       <button id="chatSetup" type="button" class="secondary-button">Open AI setup</button>
       <label for="chatModel">Copilot model</label><select id="chatModel" disabled></select>
-      <label for="chatContextIds">Attach ADO work-item IDs (optional)</label>
-      <input id="chatContextIds" type="text" placeholder="e.g. 179328, 196268" aria-describedby="chatContextHint">
-      <p id="chatContextHint" class="ai-hint">Only attached items are read from ADO and sent to Copilot. Connect to ADO first to include them.</p>
+      <label class="chat-current-item" for="chatCurrentWorkItem">
+        <input id="chatCurrentWorkItem" type="checkbox" aria-describedby="chatCurrentWorkItemHint"> Current Work Item
+      </label>
+      <p id="chatCurrentWorkItemHint" class="ai-hint" aria-live="polite">Open a work item to use it as context.</p>
+      <div id="chatManualContext">
+        <label for="chatContextIds">Attach ADO work-item IDs (optional)</label>
+        <input id="chatContextIds" type="text" placeholder="e.g. 179328, 196268" aria-describedby="chatContextHint">
+      </div>
+      <p id="chatContextHint" class="ai-hint">Selected items are read from ADO and sent to Copilot when you send a message.</p>
     </div>
     <div id="chatMessages" class="chat-messages" role="log" aria-live="polite"><p class="ai-hint">Ask a question, summarize attached work items, or draft test steps and comments.</p></div>
     <form id="chatForm" class="chat-form">
