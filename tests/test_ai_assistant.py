@@ -287,3 +287,25 @@ def test_rewrite_rejects_duplicate_json_keys(browser, monkeypatch):
     response = post_rewrite(browser)
     assert response.status_code == 502
     assert 'invalid JSON' in response.json['error']
+
+
+def test_current_work_item_reads_only_the_focused_item(browser, monkeypatch):
+    connect(browser, monkeypatch)
+    current = {'id': 123, 'fields': {'System.Title': 'Cooler', 'Microsoft.VSTS.TCM.Steps': '<steps />'}}
+    ado = Mock()
+    ado.read_work_items.return_value = [current, {'id': 456, 'fields': {'System.Title': 'Another case'}}]
+    monkeypatch.setattr(routes, 'get_ado_client', lambda: ado)
+    chat = Mock(return_value='Draft')
+    monkeypatch.setattr(AiClient, 'chat', chat)
+
+    question = {'message': 'Review these steps', 'model': 'test-model', 'currentWorkItemId': '123'}
+    response = browser.post('/api/chat', json=question)
+    assert response.json == {'answer': 'Draft', 'contextIds': [123]}
+    ado.read_work_items.assert_called_once_with([123])
+    chat.assert_called_once_with('Review these steps', model='test-model', history=[], context=[current])
+
+    assert browser.post('/api/chat', json={**question, 'ids': [456]}).status_code == 400
+    assert browser.post('/api/chat', json={**question, 'currentWorkItemId': 2147483648}).status_code == 400
+    ado.read_work_items.return_value = []
+    assert browser.post('/api/chat', json=question).status_code == 404
+    chat.assert_called_once()

@@ -424,9 +424,15 @@
       <p id="chatStatus" role="status" aria-live="polite">Connect to Copilot in Setup to start.</p>
       <button id="chatSetup" type="button" class="secondary-button">Open AI setup</button>
       <label for="chatModel">Copilot model</label><select id="chatModel" disabled></select>
-      <label for="chatContextIds">Attach ADO work-item IDs (optional)</label>
-      <input id="chatContextIds" type="text" placeholder="e.g. 179328, 196268" aria-describedby="chatContextHint">
-      <p id="chatContextHint" class="ai-hint">Only attached items are read from ADO and sent to Copilot. Connect to ADO first to include them.</p>
+      <label class="chat-current-item" for="chatCurrentWorkItem">
+        <input id="chatCurrentWorkItem" type="checkbox" aria-describedby="chatCurrentWorkItemHint"> Current Work Item
+      </label>
+      <p id="chatCurrentWorkItemHint" class="ai-hint" aria-live="polite">Open a work item to use it as context.</p>
+      <div id="chatManualContext">
+        <label for="chatContextIds">Attach ADO work-item IDs (optional)</label>
+        <input id="chatContextIds" type="text" placeholder="e.g. 179328, 196268" aria-describedby="chatContextHint">
+      </div>
+      <p id="chatContextHint" class="ai-hint">Selected items are read from ADO and sent to Copilot when you send a message.</p>
     </div>
     <div id="chatMessages" class="chat-messages" role="log" aria-live="polite"><p class="ai-hint">Ask a question, summarize attached work items, or draft test steps and comments.</p></div>
     <form id="chatForm" class="chat-form">

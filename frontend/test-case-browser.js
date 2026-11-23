@@ -309,6 +309,8 @@ function initializeWorkItemBrowser(bugPage = null) {
     section(planning, 'Planning', fieldList(planningFields));
     section(planning, 'Classification', fieldList(fields.filter((field) => ['System.State', 'System.Reason', 'System.AssignedTo', 'System.AreaPath', 'System.IterationPath', 'System.Tags'].includes(field.referenceName))));
     layout.append(main, planning); $('tcDetails').appendChild(layout);
+    $('tcSelected').dataset.currentWorkItemId = String(data.id);
+    $('tcSelected').dataset.currentWorkItemTitle = data.title;
     $('tcSelected').hidden = false;
     modifications.reset(data.id, fields);
     activateTab('tcDetails');

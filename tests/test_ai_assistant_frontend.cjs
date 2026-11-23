@@ -19,7 +19,7 @@ function load() {
   const $=id=>{ if(!nodes.has(id)) nodes.set(id,new Element()); return nodes.get(id); };
   $('chatbox').classes.add('hidden');
   const calls=[];
-  const context=vm.createContext({document:{getElementById:$,createElement:()=>new Element(),querySelector:s=>$(s.slice(1))},
+  const context=vm.createContext({document:{getElementById:$,createElement:()=>new Element(),querySelector:s=>s.startsWith('#') ? $(s.slice(1)) : null},
     api:async(path,options)=>{calls.push({path,body:options?.body?JSON.parse(options.body):null});return context.respond(path,options);},
     respond:async()=>({connected:false,models:[]})});
   vm.runInContext(fs.readFileSync('frontend/assistant.js','utf8'),context);

@@ -40,6 +40,7 @@ const browserTest = (name, run) => test(name, { skip: !chromium && 'Enable real-
   steps[1].action = '<ol><li><div>Inspect <Flow Rate></div></li><li>Use <sample.hsc>.</li></ol>';
   const mocks = {
     steps, stepsWarning: '',
+    chat: (route) => route.fulfill({ json: { answer: 'Draft', contextIds: [] } }),
     bug: (route) => route.fulfill({ status: 404, json: { error: 'Bug fixture not configured.' } }),
     modifications: (route) => route.fulfill({ json: { updates: [] } }),
     executions: (route) => route.fulfill({ json: { history: [], nextSkip: null } }),
@@ -49,6 +50,7 @@ const browserTest = (name, run) => test(name, { skip: !chromium && 'Enable real-
     const request = route.request();
     const url = new URL(request.url()).pathname;
     calls.push([url, request.method()]);
+    if (url === '/api/chat') return mocks.chat(route);
     if (url === '/api/chat/rewrite-test-steps') return mocks.rewrite(route);
     if (url === '/api/chat/status') return route.fulfill({ json: {
       connected: true, models: [{ id: 'luna', name: 'Luna' }, { id: 'other', name: 'Other' }],
@@ -501,4 +503,64 @@ browserTest('searches Post Development Bugs and opens their modification history
   assert.equal(await bug.getByRole('tab', { name: 'Details', exact: true }).getAttribute('aria-selected'), 'true');
   await bug.getByRole('tab', { name: 'Links (0)' }).click();
   await bug.getByText('This bug has no links.').waitFor();
+});
+
+browserTest('Current Work Item follows the visible item and keeps conversation context scoped', async ({ page, mocks }) => {
+  const prompts = [];
+  mocks.chat = (route) => {
+    const prompt = route.request().postDataJSON();
+    prompts.push(prompt);
+    return route.fulfill({ json: { answer: `Draft ${prompts.length}`, contextIds: [Number(prompt.currentWorkItemId || prompt.ids[0])] } });
+  };
+  mocks.bug = (route) => {
+    const path = new URL(route.request().url()).pathname;
+    const bug = { id: 42, title: 'Flowsheet bug', fields: [], linkCount: 0, url: 'https://dev.azure.com/org/project/_workitems/edit/42' };
+    return route.fulfill({ json: path.endsWith('/search') ? { bugs: [bug] } : bug });
+  };
+  await selectCase(page);
+  await page.getByRole('button', { name: 'Open AI assistant' }).click();
+  const chat = page.locator('#chatbox');
+  const current = chat.getByRole('checkbox', { name: 'Current Work Item' });
+  const send = chat.getByRole('button', { name: 'Send', exact: true });
+  const prompt = chat.getByRole('textbox', { name: 'Your question' });
+  const manual = chat.getByRole('textbox', { name: /Attach ADO work-item IDs/ });
+  assert.equal(await current.isChecked(), false);
+  assert.match(await chat.locator('#chatCurrentWorkItemHint').innerText(), /#11 · Test case 11/);
+  await manual.fill('99');
+  await current.check();
+  assert.equal(await manual.isVisible(), false);
+
+  async function ask(question, count) {
+    await prompt.fill(question);
+    await send.click();
+    await chat.getByText(`Draft ${count}`, { exact: true }).waitFor();
+  }
+  await ask('Review the current steps', 1);
+  assert.equal(prompts[0].currentWorkItemId, '11');
+  assert.equal(prompts[0].ids, undefined);
+  await ask('Make the draft shorter', 2);
+  assert.equal(prompts[1].history.length, 2);
+
+  await page.locator('[data-work-tab="post-development-bug"]').click();
+  await prompt.fill('Now summarize this bug');
+  assert.equal(await send.isDisabled(), true);
+  assert.match(await chat.locator('#chatCurrentWorkItemHint').innerText(), /Open a work item/);
+  const bugPage = page.locator('[data-work-page="post-development-bug"]');
+  const bugSearch = bugPage.getByRole('searchbox', { name: 'Search value' });
+  await bugSearch.fill('42');
+  await bugSearch.press('Enter');
+  await bugPage.getByRole('radio', { name: /Select post development bug 42/ }).check();
+  await chat.getByText('#42 · Flowsheet bug', { exact: true }).waitFor();
+  await ask('Now summarize this bug', 3);
+  assert.equal(prompts[2].currentWorkItemId, '42');
+  assert.deepEqual(prompts[2].history, []);
+
+  await page.getByRole('tab', { name: 'Setup', exact: true }).click();
+  await prompt.fill('Question with an explicit ID');
+  assert.equal(await send.isDisabled(), true);
+  await current.uncheck();
+  assert.equal(await manual.inputValue(), '99');
+  await ask('Question with an explicit ID', 4);
+  assert.deepEqual(prompts[3].ids, ['99']);
+  assert.deepEqual(prompts[3].history, []);
 });

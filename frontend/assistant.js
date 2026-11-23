@@ -6,6 +6,9 @@
   const model = el('chatModel');
   const input = el('chatInput');
   const ids = el('chatContextIds');
+  const useCurrentItem = el('chatCurrentWorkItem');
+  const currentItemHint = el('chatCurrentWorkItemHint');
+  const workItems = document.querySelector('.work-type-panel');
   const messages = el('chatMessages');
   const toggle = el('chatToggle');
   const box = el('chatbox');
@@ -13,6 +16,14 @@
   let connecting = false;
   let busy = false;
   let history = [];
+  let historyScope = null;
+
+  function visibleWorkItem() {
+    if (!workItems || workItems.hidden) return null;
+    const article = workItems.querySelector('.work-page:not([hidden]) [data-current-work-item-id]:not([hidden])');
+    if (!article) return null;
+    return { id: article.dataset.currentWorkItemId, title: article.dataset.currentWorkItemTitle };
+  }
 
   function controls() {
     connect.disabled = connecting || busy || !token.value.trim();
@@ -20,9 +31,15 @@
     token.disabled = connecting || busy;
     model.disabled = !connected || connecting || busy;
     input.disabled = !connected || connecting || busy;
-    el('chatSend').disabled = !connected || connecting || busy || !input.value.trim();
+    const current = visibleWorkItem();
+    const needsCurrentItem = useCurrentItem.checked && !current;
+    el('chatSend').disabled = !connected || connecting || busy || needsCurrentItem || !input.value.trim();
     el('chatNew').disabled = connecting || busy;
-    ids.disabled = connecting || busy;
+    useCurrentItem.disabled = connecting || busy || (!current && !useCurrentItem.checked);
+    el('chatManualContext').hidden = useCurrentItem.checked;
+    ids.disabled = connecting || busy || useCurrentItem.checked;
+    const hint = current ? `#${current.id}${current.title ? ' · ' + current.title : ''}` : 'Open a work item to use it as context.';
+    if (currentItemHint.textContent !== hint) currentItemHint.textContent = hint;
     el('aiConnectProgress').hidden = !connecting;
   }
 
@@ -33,6 +50,7 @@
 
   function resetChat() {
     history = [];
+    historyScope = null;
     messages.replaceChildren();
     input.value = '';
   }
@@ -68,6 +86,7 @@
   function showChat(show) {
     box.classList.toggle('hidden', !show);
     toggle.setAttribute('aria-expanded', String(show));
+    if (show) controls();
     if (show && connected && !busy) input.focus();
     if (!show) toggle.focus();
   }
@@ -85,10 +104,16 @@
   });
   token.addEventListener('input', () => { error(); controls(); });
   input.addEventListener('input', controls);
+  useCurrentItem.addEventListener('change', controls);
+  if (workItems) new MutationObserver(controls).observe(workItems, {
+    subtree: true, attributes: true,
+    attributeFilter: ['hidden', 'data-current-work-item-id', 'data-current-work-item-title'],
+  });
   el('chatNew').addEventListener('click', () => {
     if (busy || connecting) return;
     resetChat();
     ids.value = '';
+    useCurrentItem.checked = false;
     controls();
     if (connected) input.focus();
   });
@@ -130,7 +155,10 @@
     event.preventDefault();
     const question = input.value.trim();
     if (!question || !connected || connecting || busy) return;
-    const contextIds = ids.value.trim() ? ids.value.trim().split(/[\s,;]+/) : [];
+    const current = useCurrentItem.checked ? visibleWorkItem() : null;
+    if (useCurrentItem.checked && !current) { controls(); return; }
+    const scope = current?.id ?? null;
+    const contextIds = !current && ids.value.trim() ? ids.value.trim().split(/[\s,;]+/) : [];
     if (contextIds.length > 20 || contextIds.some((id) => !/^[1-9][0-9]{0,9}$/.test(id))) {
       el('chatStatus').textContent = 'Enter up to 20 positive work-item IDs, separated by commas or spaces.';
       ids.focus();
@@ -142,11 +170,17 @@
     message(question, 'user');
     const reply = message('Thinking…', 'ai');
     try {
+      const conversation = historyScope === scope ? history : [];
       const data = await api('/api/chat', {
-        method: 'POST', body: JSON.stringify({ message: question, model: model.value, ids: contextIds, history }),
+        method: 'POST',
+        body: JSON.stringify({
+          message: question, model: model.value, history: conversation,
+          ...(current ? { currentWorkItemId: current.id } : { ids: contextIds }),
+        }),
       });
       reply.textContent = data.answer;
-      history.push({ role: 'user', content: question }, { role: 'assistant', content: data.answer.slice(0, 16000) });
+      historyScope = scope;
+      history = [...conversation, { role: 'user', content: question }, { role: 'assistant', content: data.answer.slice(0, 16000) }];
       history = history.slice(-20);
       el('chatStatus').textContent = data.contextIds.length
         ? `Copilot connected · Attached: ${data.contextIds.join(', ')}` : 'Copilot connected';
