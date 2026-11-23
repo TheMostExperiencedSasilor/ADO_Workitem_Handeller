@@ -240,23 +240,51 @@
         <article id="tcSelected" hidden>
           <div class="tc-selected-heading"><div><span class="tc-eyebrow" id="tcSelectedId"></span><h3 id="tcSelectedTitle"></h3><p id="tcSelectedMeta"></p></div><a id="tcAdoLink" target="_blank" rel="noopener noreferrer">Open in ADO ↗</a></div>
           <div class="tc-tabs" role="tablist" aria-label="Selected test case">
-            <button id="tcDetailsTab" type="button" role="tab" aria-controls="tcDetails" aria-selected="true" data-tc-tab="tcDetails">Details</button>
+            <button id="tcDetailsTab" type="button" role="tab" aria-controls="tcDetails" aria-selected="false" tabindex="-1" data-tc-tab="tcDetails">Details</button>
             <button id="tcAutomationTab" type="button" role="tab" aria-controls="tcAutomation" aria-selected="false" tabindex="-1" data-tc-tab="tcAutomation">Automation</button>
-            <button id="tcHistoryTab" type="button" role="tab" aria-controls="tcHistory" aria-selected="false" tabindex="-1" data-tc-tab="tcHistory">History</button>
+            <button id="tcModHistoryTab" class="tc-icon-tab" type="button" role="tab" aria-controls="tcModHistory" aria-selected="true" aria-label="Modification History" data-tc-tab="tcModHistory">
+              <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 1 2.5 6.2M3 12V5m0 7h7m2-5v5l3 2"/></svg>
+              <span class="tc-tab-tooltip" aria-hidden="true">Modification History</span>
+            </button>
+            <button id="tcHistoryTab" class="tc-icon-tab" type="button" role="tab" aria-controls="tcHistory" aria-selected="false" aria-label="Execution History" tabindex="-1" data-tc-tab="tcHistory">
+              <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m3 6 2 2 4-4m-6 11 2 2 4-4m3-6h9m-9 9h9"/></svg>
+              <span class="tc-tab-tooltip" aria-hidden="true">Execution History</span>
+            </button>
           </div>
-          <div id="tcDetails" class="tc-content" role="tabpanel" aria-labelledby="tcDetailsTab"></div>
+          <div id="tcDetails" class="tc-content" role="tabpanel" aria-labelledby="tcDetailsTab" hidden></div>
           <div id="tcAutomation" class="tc-content" role="tabpanel" aria-labelledby="tcAutomationTab" hidden></div>
-          <div id="tcHistory" class="tc-content" role="tabpanel" aria-labelledby="tcHistoryTab" hidden>
-            <div class="tc-history-heading"><div><h4>Execution history</h4><p class="tc-hint">Newest first · local dates and times. Older results load automatically; filters apply as they arrive.</p></div></div>
-            <div class="tc-table-wrap tc-history-table-wrap"><table class="tc-table"><caption class="tc-sr-only">Test case execution history</caption><thead><tr><th>Test Suite</th><th>Test Plan</th><th>Result</th><th><button id="tcHistoryDateTrigger" class="tc-date-trigger" type="button" aria-haspopup="dialog" aria-controls="tcHistoryCalendar" aria-expanded="false" aria-label="Filter logged date and time by date range">Logged Date and time <span aria-hidden="true">▾</span></button></th><th>Tester</th></tr></thead><tbody id="tcHistoryRows"></tbody></table></div>
-            <div id="tcHistoryCalendar" class="tc-calendar" role="dialog" aria-labelledby="tcCalendarTitle" hidden>
-              <div class="tc-calendar-heading"><strong id="tcCalendarTitle">Logged date range</strong><button id="tcCalendarClose" type="button" aria-label="Close date calendar">×</button></div>
-              <div class="tc-calendar-nav"><button id="tcCalendarPrev" type="button" aria-label="Previous month">‹</button><select id="tcCalendarMonth" aria-label="Calendar month"></select><select id="tcCalendarYear" aria-label="Calendar year"></select><button id="tcCalendarNext" type="button" aria-label="Next month">›</button></div>
-              <div id="tcCalendarDays" class="tc-calendar-days" role="grid" aria-label="Calendar dates"></div>
-              <p id="tcCalendarRange" class="tc-calendar-range" aria-live="polite"></p>
-              <p id="tcCalendarHint" class="tc-calendar-hint" aria-live="polite">Choose a start date.</p>
-              <div class="tc-calendar-actions"><button id="tcCalendarClear" type="button">Clear dates</button><button id="tcCalendarDone" type="button">Done</button></div>
+          <div id="tcModHistory" class="tc-content" role="tabpanel" aria-labelledby="tcModHistoryTab">
+            <div class="tc-history-heading"><h4>Modification History</h4></div>
+            <div class="tc-history-filters" role="group" aria-label="Filter modification history">
+              <label>Modified by<select id="tcModHistoryAuthor"><option value="">Anyone</option></select></label>
+              <label>Modification type<select id="tcModHistoryType"><option value="">All types</option></select></label>
+              <div class="tc-mod-date-controls">
+                <label>From date<input id="tcModHistoryFrom" type="date"></label>
+                <label>To date<input id="tcModHistoryTo" type="date"></label>
+                <button id="tcModHistoryDateTrigger" class="tc-date-trigger" type="button" aria-haspopup="dialog" aria-controls="tcHistoryCalendar" aria-expanded="false" aria-label="Choose modification date range">
+                  <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/></svg>
+                </button>
+              </div>
+              <button id="tcModHistoryClear" type="button">Clear filters</button>
             </div>
+            <div id="tcModHistoryProgress" class="tc-loading" role="progressbar" aria-label="Loading modification history" hidden><span></span></div>
+            <p id="tcModHistoryStatus" class="tc-hint" role="status"></p>
+            <button id="tcModHistoryRetry" type="button" hidden>Retry loading</button>
+            <div id="tcModHistoryContent" class="tc-mod-layout" hidden>
+              <section class="tc-mod-timeline" aria-label="Revision timeline">
+                <ol id="tcModHistoryTimeline"></ol>
+                <nav class="tc-history-pagination tc-mod-pages" aria-label="Modification history pages">
+                  <button id="tcModHistoryPrev" type="button" aria-label="Previous revision page">‹</button>
+                  <span id="tcModHistoryPage" role="status"></span>
+                  <button id="tcModHistoryNext" type="button" aria-label="Next revision page">›</button>
+                </nav>
+              </section>
+              <section id="tcModHistoryDetails" class="tc-mod-details" aria-label="Revision details"></section>
+            </div>
+          </div>
+          <div id="tcHistory" class="tc-content" role="tabpanel" aria-labelledby="tcHistoryTab" hidden>
+            <div class="tc-history-heading"><div><h4>Execution History</h4><p class="tc-hint">Newest first · local dates and times. Older results load automatically; filters apply as they arrive.</p></div></div>
+            <div class="tc-table-wrap tc-history-table-wrap"><table class="tc-table"><caption class="tc-sr-only">Test case execution history</caption><thead><tr><th>Test Suite</th><th>Test Plan</th><th>Result</th><th><button id="tcHistoryDateTrigger" class="tc-date-trigger" type="button" aria-haspopup="dialog" aria-controls="tcHistoryCalendar" aria-expanded="false" aria-label="Filter logged date and time by date range">Logged Date and time <span aria-hidden="true">▾</span></button></th><th>Tester</th></tr></thead><tbody id="tcHistoryRows"></tbody></table></div>
             <div id="tcHistoryFooter" class="tc-history-footer">
               <div class="tc-history-filters" role="group" aria-label="Filter execution history">
                 <label>Test Suite<input id="tcHistorySuite" type="search" placeholder="Filter suite name or ID"></label>
@@ -280,8 +308,16 @@
                 <button id="tcHistoryMore" type="button" hidden>Retry loading</button>
               </nav>
               <div id="tcHistoryProgress" class="tc-loading" role="progressbar" aria-label="Loading execution history" hidden><span></span></div>
-              <p id="tcHistoryStatus" role="status" aria-live="polite">Open History to load execution results.</p>
+              <p id="tcHistoryStatus" role="status" aria-live="polite">Open Execution History to load execution results.</p>
             </div>
+          </div>
+          <div id="tcHistoryCalendar" class="tc-calendar" role="dialog" aria-labelledby="tcCalendarTitle" hidden>
+            <div class="tc-calendar-heading"><strong id="tcCalendarTitle">Date range</strong><button id="tcCalendarClose" type="button" aria-label="Close date calendar">×</button></div>
+            <div class="tc-calendar-nav"><button id="tcCalendarPrev" type="button" aria-label="Previous month">‹</button><select id="tcCalendarMonth" aria-label="Calendar month"></select><select id="tcCalendarYear" aria-label="Calendar year"></select><button id="tcCalendarNext" type="button" aria-label="Next month">›</button></div>
+            <div id="tcCalendarDays" class="tc-calendar-days" role="grid" aria-label="Calendar dates"></div>
+            <p id="tcCalendarRange" class="tc-calendar-range" aria-live="polite"></p>
+            <p id="tcCalendarHint" class="tc-calendar-hint" aria-live="polite">Choose a start date.</p>
+            <div class="tc-calendar-actions"><button id="tcCalendarClear" type="button">Clear dates</button><button id="tcCalendarDone" type="button">Done</button></div>
           </div>
         </article>
       </div>
@@ -400,6 +436,8 @@
   <script src="assistant.js"></script>
   <script src="test-step-markdown.js"></script>
   <script src="test-step-copy.js"></script>
+  <script src="test-case-date-time.js"></script>
+  <script src="test-case-modifications.js"></script>
   <script src="test-case-browser.js"></script>
   <script src="export-results.js"></script>
   <script src="test-assignment-workbook.js"></script>

@@ -13,6 +13,7 @@ function loadBrowser({ timeZone } = {}) {
       this.classes = new Set();
       this.classList = { toggle: (name, active) => active ? this.classes.add(name) : this.classes.delete(name) };
     }
+    get options() { return this.children; }
     get children() { return this.childNodes.filter((node) => node.nodeType === 1); }
     get textContent() { return this._text + this.childNodes.map((node) => node.textContent).join(''); }
     set textContent(value) { this._text = String(value); this.childNodes = []; }
@@ -28,24 +29,27 @@ function loadBrowser({ timeZone } = {}) {
   }
   const nodes = new Map();
   const $ = (id) => { if (!nodes.has(id)) nodes.set(id, new Element()); return nodes.get(id); };
-  const tabs = ['Details', 'Automation', 'History'].map((name) => {
+  const tabs = ['Details', 'Automation', 'ModHistory', 'History'].map((name) => {
     const tab = $(`tc${name}Tab`); tab.dataset.tcTab = `tc${name}`; return tab;
   });
   $('tcField').value = 'id'; $('tcMode').value = 'exact';
   $('tcHistoryCalendar').hidden = true;
+  for (const id of ['tcModHistoryAuthor', 'tcModHistoryType']) $(id).appendChild(new Element('option'));
   const documentListeners = {};
   const calls = [];
   const context = vm.createContext({
     URL, console,
     window: { innerWidth: 1200, innerHeight: 800, addEventListener() {} },
-    Intl: timeZone ? { DateTimeFormat: function(locale, options) { return new Intl.DateTimeFormat(locale, { ...options, timeZone }); } } : Intl,
+    Intl: timeZone ? { DateTimeFormat: function(locale, options) { return new Intl.DateTimeFormat(locale, { timeZone, ...options }); } } : Intl,
     document: { getElementById: $, querySelectorAll: () => tabs, addEventListener: (type, handler) => { documentListeners[type] = handler; },
       createElement: (tag) => new Element(tag), createTextNode: (value) => new Element('#text', value) },
     DOMParser: class { parseFromString(value) { return { body: { childNodes: [new Element('#text', value)] } }; } },
     fetch: async (url, options) => { calls.push([url, options]); return context.respond(url, options); },
     respond: async () => ({ ok: true, json: async () => ({}) }),
   });
-  vm.runInContext(fs.readFileSync('frontend/test-case-browser.js', 'utf8'), context);
+  for (const name of ['test-case-date-time', 'test-case-modifications', 'test-case-browser']) {
+    vm.runInContext(fs.readFileSync(`frontend/${name}.js`, 'utf8'), context);
+  }
   const json = (data, ok = true) => ({ ok, json: async () => data });
   const submit = () => $('tcSearch').listeners.submit({ preventDefault() {} });
   const flush = () => new Promise((resolve) => setImmediate(resolve));
@@ -78,7 +82,9 @@ test('search pagination, one-case radios, keyboard tabs, lazy history and load m
   await radio.listeners.change();
   assert.equal($('tcSelected').hidden, false);
   assert.equal(calls.filter(([url]) => url.includes('/history')).length, 0);
-  $('tcDetailsTab').listeners.keydown({ key: 'End', preventDefault() {} });
+  assert.equal($('tcModHistoryTab').attributes['aria-selected'], 'true');
+  assert.ok(calls.some(([url]) => url.endsWith('/1/modification-history')));
+  $('tcModHistoryTab').listeners.keydown({ key: 'ArrowRight', preventDefault() {} });
   await flush();
   assert.equal($('tcHistoryTab').attributes['aria-selected'], 'true');
   assert.equal($('tcHistoryRows').children[0].children.length, 5);
@@ -276,9 +282,9 @@ test('invalid date range and non-advancing ADO pages report errors without claim
 
 test('Automation hides generic status, keeps State of Automation, and formats accepted date in local time', async () => {
   for (const [timeZone, expected] of [
-    ['UTC', 'May/06/2025 02:27 AM UTC'],
-    ['Asia/Shanghai', 'May/06/2025 10:27 AM GMT+8'],
-    ['America/New_York', 'May/05/2025 10:27 PM EDT'],
+    ['UTC', 'May 6, 2025, 2:27 AM'],
+    ['Asia/Shanghai', 'May 6, 2025, 10:27 AM'],
+    ['America/New_York', 'May 5, 2025, 10:27 PM'],
   ]) {
     const { $, context, submit, json, details, findAll } = loadBrowser({ timeZone });
     const data = details(1);
@@ -411,4 +417,26 @@ test('manual dates, Clear filters and test case changes synchronize the calendar
   await $('tcResultRows').children[1].children[0].children[0].listeners.change();
   assert.equal($('tcHistoryCalendar').hidden, true);
   assert.equal($('tcHistoryFrom').value, ''); assert.equal($('tcHistoryTo').value, '');
+});
+
+test('late modification history from a previous case cannot overwrite the selected case', async () => {
+  const { $, context, submit, json, details, flush } = loadBrowser();
+  let finishFirst;
+  context.respond = async (url) => {
+    if (url.endsWith('/search')) return json(results());
+    if (url.endsWith('/1/modification-history')) return new Promise((resolve) => {
+      finishFirst = () => resolve(json({ error: 'Error for case one' }, false));
+    });
+    if (url.endsWith('/2/modification-history')) return json({ updates: [] });
+    return json(details(Number(url.split('/').pop())));
+  };
+  await submit();
+  await $('tcResultRows').children[0].children[0].children[0].listeners.change();
+  assert.equal($('tcModHistoryProgress').hidden, false);
+  await $('tcResultRows').children[1].children[0].children[0].listeners.change();
+  finishFirst();
+  await flush();
+  assert.equal($('tcSelectedId').textContent, 'TEST CASE 2');
+  assert.equal($('tcModHistoryStatus').textContent, 'No modification history returned by ADO for this test case.');
+  assert.equal($('tcModHistoryRetry').hidden, true);
 });

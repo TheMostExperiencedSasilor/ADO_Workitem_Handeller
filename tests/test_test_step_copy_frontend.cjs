@@ -26,7 +26,7 @@ const browserTest = (name, run) => test(name, { skip: !chromium && 'Enable real-
   const browser = await chromium.launch({ executablePath: process.env.TEST_CHROMIUM_PATH });
   t.after(() => browser.close());
   const context = await browser.newContext({
-    viewport: { width: 1440, height: 900 }, permissions: ['clipboard-read', 'clipboard-write'],
+    viewport: { width: 1440, height: 900 }, timezoneId: 'America/New_York', permissions: ['clipboard-read', 'clipboard-write'],
   });
   const page = await context.newPage();
   const calls = [];
@@ -38,7 +38,12 @@ const browserTest = (name, run) => test(name, { skip: !chromium && 'Enable real-
   steps[0].expected = '<div>Lists match<br>Keep A &lt; B.</div>';
   steps[1].number = '1.1';
   steps[1].action = '<ol><li><div>Inspect <Flow Rate></div></li><li>Use <sample.hsc>.</li></ol>';
-  const mocks = { steps, stepsWarning: '', rewrite: (route) => route.fulfill({ json: { steps: [] } }) };
+  const mocks = {
+    steps, stepsWarning: '',
+    modifications: (route) => route.fulfill({ json: { updates: [] } }),
+    executions: (route) => route.fulfill({ json: { history: [], nextSkip: null } }),
+    rewrite: (route) => route.fulfill({ json: { steps: [] } }),
+  };
   await page.route('**/api/**', (route) => {
     const request = route.request();
     const url = new URL(request.url()).pathname;
@@ -47,10 +52,16 @@ const browserTest = (name, run) => test(name, { skip: !chromium && 'Enable real-
     if (url === '/api/chat/status') return route.fulfill({ json: {
       connected: true, models: [{ id: 'luna', name: 'Luna' }, { id: 'other', name: 'Other' }],
     } });
+    if (url.endsWith('/modification-history')) return mocks.modifications(route);
+    if (url.endsWith('/history')) return mocks.executions(route);
     if (url.endsWith('/search')) return route.fulfill({ json: { testCases } });
     if (url.endsWith('/test-cases/11')) return route.fulfill({ json: {
       id: 11, title: 'Test case 11', url: 'https://dev.azure.com/org/project/_workitems/edit/11',
-      fields: [{ name: 'State', referenceName: 'System.State', value: 'Design' }], steps: mocks.steps, stepsWarning: mocks.stepsWarning,
+      fields: [
+        { name: 'State', referenceName: 'System.State', value: 'Design' },
+        { name: 'Activated Date', referenceName: 'Microsoft.VSTS.Common.ActivatedDate', type: 'dateTime', value: '2026-03-23T22:59:39.49Z' },
+        { name: 'Target Date', referenceName: 'Custom.TargetDate', value: '2026-03-23' },
+      ], steps: mocks.steps, stepsWarning: mocks.stepsWarning,
     } });
     return route.fulfill({ json: {} });
   });
@@ -58,13 +69,18 @@ const browserTest = (name, run) => test(name, { skip: !chromium && 'Enable real-
   await run({ page, calls, mocks });
 });
 
-async function selectCase(page) {
+async function openCase(page) {
   await page.getByRole('tab', { name: 'Work Items', exact: true }).click();
   await page.locator('[data-work-tab="test-case"]').click();
   await page.locator('#tcQuery').fill('1');
   await page.locator('#tcSearchButton').click();
   await page.locator('#tcNext').click();
   await page.getByRole('radio', { name: 'Select test case 11: Test case 11' }).check();
+}
+
+async function selectCase(page) {
+  await openCase(page);
+  await page.getByRole('tab', { name: 'Details', exact: true }).click();
   await page.getByRole('button', { name: 'Copy All Steps' }).waitFor();
 }
 
@@ -286,4 +302,123 @@ browserTest('keeps reopened drafts independent of pending and invalid AI results
   assert.equal(await editor.inputValue(), 'New draft');
   assert.equal(await rewrite.isEnabled(), true);
   assert.equal(aiCalls(), 2);
+});
+
+browserTest('history tabs default to modifications and preserve execution filters and paging', async ({ page, calls, mocks }) => {
+  const update = (id, props) => ({ id, revision: id, author: 'Service Account', authorId: 'service',
+    changedAt: '2026-03-22T10:00:00Z', fields: [], relations: [], ...props });
+  const step = (action) => ({ number: '1', action, expected: 'Case loads' });
+  const updates = [
+    update(5, { author: 'Joy Cheng', authorId: 'joy', changedAt: '2026-03-23T22:59:39.49Z', fields: [{
+      field: 'Microsoft.VSTS.TCM.Steps', label: 'Test Steps',
+      steps: { changes: [{
+        before: step('Load &lt;Old Plant.hsc&gt; &amp; check "Vapour"'),
+        after: step('<div>Load <LNG Plant Simulation.hsc> &amp; inspect "Vapour" &amp;lt; <b onclick="unsafe()">safely</b><script>untrusted markers</script></div>'),
+        moved: false,
+      }] },
+    }] }),
+    update(4, { revision: 3, author: 'Joy Cheng', authorId: 'joy', changedAt: '2026-03-23T02:30:00Z',
+      relations: [{ operation: 'added', type: 'AttachedFile', name: 'Trends.png' }] }),
+    update(3, { changedAt: '2026-03-22T19:00:00Z', fields: [{
+      field: 'System.AreaPath', label: 'Area Path', before: 'QA', after: 'QA\\HYSYS',
+    }] }),
+    update(2, { changedAt: '2026-03-21T10:00:00Z', fields: [{
+      field: 'System.State', label: 'State', before: 'Design', after: 'Ready',
+    }] }),
+    update(1, { created: true, changedAt: '2026-03-20T10:00:00Z' }),
+    ...Array.from({ length: 20 }, (_, i) => update(i + 6, { changedAt: '2026-03-18T10:00:00Z' })),
+  ];
+  mocks.modifications = (route) => route.fulfill({ json: { updates: [...updates].reverse() } });
+  mocks.executions = (route) => {
+    const laterPage = new URL(route.request().url()).searchParams.get('skip') === '50';
+    return route.fulfill({ json: {
+      history: [{ runId: 8, resultId: laterPage ? 2 : 1, testSuite: 'Regression Suite', testPlan: 'V15',
+        result: laterPage ? 'Failed' : 'Passed', tester: 'Recorded Tester',
+        loggedDate: laterPage ? '2026-03-20T18:00:00Z' : '2026-03-23T22:59:39.49Z' }],
+      nextSkip: laterPage ? null : 50,
+    } });
+  };
+  await openCase(page);
+  const mods = page.getByRole('tab', { name: 'Modification History', exact: true });
+  const executions = page.getByRole('tab', { name: 'Execution History', exact: true });
+  const timeline = page.getByRole('region', { name: 'Revision timeline' });
+  const details = page.getByRole('region', { name: 'Revision details' });
+  const active = timeline.locator('[aria-current="true"]');
+  await details.getByText('Step 1 updated').waitFor();
+  assert.equal(await mods.getAttribute('aria-selected'), 'true');
+  assert.deepEqual(await page.locator('.tc-icon-tab').evaluateAll((tabs) => tabs.map(
+    (tab) => [tab.getAttribute('aria-label'), tab.querySelector('svg').getAttribute('width')],
+  )), [['Modification History', '20'], ['Execution History', '20']]);
+  assert.equal(calls.filter(([url]) => url.endsWith('/history')).length, 0);
+  await mods.hover();
+  assert.equal(await mods.locator('.tc-tab-tooltip').isVisible(), true);
+  const border = () => page.locator('.tc-icon-tab').evaluateAll((tabs) => tabs.map(
+    (tab) => getComputedStyle(tab).borderBottomColor,
+  ));
+  const [blue, transparent] = await border();
+  assert.notEqual(blue, 'rgba(0, 0, 0, 0)');
+  assert.equal(transparent, 'rgba(0, 0, 0, 0)');
+  assert.match(await active.innerText(), /Joy Cheng.*Changed Test Steps.*Mar 23, 2026, 6:59 PM.*Revision 5/s);
+  assert.ok((await details.innerText()).includes('Load <Old Plant.hsc> & check "Vapour"'));
+  assert.ok((await details.innerText()).includes('Load <LNG Plant Simulation.hsc> & inspect "Vapour" &lt; safely'));
+  assert.doesNotMatch(await details.innerText(), /untrusted markers|Case loads/);
+  assert.equal(await details.locator('script, [onclick]').count(), 0);
+
+  await timeline.getByRole('button', { name: /Changed Area Path/ }).click();
+  assert.match(await active.innerText(), /Changed Area Path/);
+  assert.match(await details.innerText(), /Previous\s+QA\s+Updated\s+QA\\HYSYS/);
+  await timeline.getByRole('button', { name: /Added attachment/ }).click();
+  assert.match(await details.innerText(), /Trends\.png/);
+  await timeline.getByRole('button', { name: 'Next revision page' }).click();
+  assert.match(await timeline.innerText(), /Page 2 of 2/);
+  assert.equal(await timeline.locator('.tc-mod-entry').count(), 5);
+  await page.getByLabel('Modified by').selectOption('joy');
+  assert.equal(await timeline.locator('.tc-mod-entry').count(), 2);
+  await page.getByLabel('Modification type').selectOption('Attachment');
+  assert.equal(await timeline.locator('.tc-mod-entry').count(), 1);
+  assert.match(await active.innerText(), /Mar 22, 2026, 10:30 PM/);
+
+  await page.getByRole('button', { name: 'Choose modification date range' }).click();
+  const pick = (date) => page.locator(`#tcCalendarDays [data-date="${date}"]`).click();
+  await pick('2026-03-22');
+  await pick('2026-03-23');
+  assert.equal(await page.locator('#tcModHistoryTo').inputValue(), '2026-03-23');
+  await pick('2026-03-23');
+  assert.equal(await page.locator('#tcModHistoryFrom').inputValue(), '2026-03-23');
+  assert.equal(await page.locator('#tcModHistoryTo').inputValue(), '');
+  assert.match(await page.locator('#tcModHistoryStatus').innerText(), /No modifications match/);
+  await page.getByRole('button', { name: 'Done', exact: true }).click();
+
+  await mods.focus();
+  await mods.press('ArrowRight');
+  assert.equal(await executions.getAttribute('aria-selected'), 'true');
+  assert.deepEqual(await border(), [transparent, blue]);
+  assert.equal(await executions.locator('.tc-tab-tooltip').isVisible(), true);
+  await page.locator('#tcHistoryRows').getByText('Failed').waitFor();
+  assert.match(await page.locator('#tcHistoryRows').innerText(), /Mar 23, 2026, 6:59 PM/);
+  await page.locator('#tcHistoryOutcome').selectOption('Failed');
+  assert.equal(await page.locator('#tcHistoryRows tr').count(), 1);
+  assert.match(await page.locator('#tcHistoryRows').innerText(), /Failed/);
+  assert.equal(await page.locator('#tcHistoryFrom').inputValue(), '');
+  await mods.click();
+  assert.equal(calls.filter(([url]) => url.endsWith('/modification-history')).length, 1);
+  assert.equal(await page.getByLabel('Modified by').inputValue(), 'joy');
+
+  await page.getByRole('tab', { name: 'Details', exact: true }).click();
+  assert.match(await page.locator('.tc-planning').innerText(), /Activated Date\s+Mar 23, 2026, 6:59 PM/);
+  assert.match(await page.locator('.tc-planning').innerText(), /Target Date\s+Mar 23, 2026/);
+});
+
+browserTest('modification history displays loading, retry and empty states', async ({ page, mocks }) => {
+  let finish;
+  mocks.modifications = (route) => new Promise((resolve) => {
+    finish = () => resolve(route.fulfill({ status: 403, json: { error: 'ADO access denied.' } }));
+  });
+  await openCase(page);
+  await page.getByRole('progressbar', { name: 'Loading modification history' }).waitFor();
+  await finish();
+  await page.getByText('ADO access denied.').waitFor();
+  mocks.modifications = (route) => route.fulfill({ json: { updates: [] } });
+  await page.locator('#tcModHistoryRetry').click();
+  await page.getByText('No modification history returned by ADO for this test case.').waitFor();
 });

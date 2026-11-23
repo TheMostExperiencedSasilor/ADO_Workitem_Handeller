@@ -11,7 +11,7 @@ from app import create_app
 from config import AppConfig
 from services.ado_client import AdoClient
 from services.ado_session import clear_ado_session
-from services.test_case_browser import TestCaseBrowser as CaseBrowser, parse_steps, search_options, title_rank
+from services.test_case_browser import TestCaseBrowser as CaseBrowser, compare_steps, describe_update, parse_steps, search_options, title_rank
 
 
 @pytest.fixture
@@ -289,3 +289,125 @@ def test_inline_xml_and_shared_step_ids_preserve_action_text_and_numbering():
     incomplete.assert_not_called()
     assert parse_steps('<unrecognized/>', mark_incomplete=incomplete)[0]['action'].startswith('Steps could not be parsed')
     incomplete.assert_called_once()
+
+
+def test_modification_history_pages_updates_and_preserves_shared_revision_ids(browser, monkeypatch):
+    browser.client.read_work_items = Mock(return_value=[item(24143)])
+    # A relation-only update can share a work item revision with a field update.
+    create = {'id': 1, 'workItemId': 24143, 'rev': 1, 'revisedDate': '2026-03-24T00:00:00Z',
+              'revisedBy': {'id': 'creator', 'displayName': 'Creator'}, 'fields': {
+                  'System.CreatedDate': {'newValue': '2026-03-23T10:00:00Z'},
+                  'System.ChangedDate': {'newValue': '2026-03-23T10:00:00Z'},
+                  'System.State': {'newValue': 'Design'},
+              }}
+    more = [{'id': i, 'workItemId': 24143, 'rev': i, 'revisedDate': '2026-03-24T00:00:00Z'} for i in range(2, 100)]
+    field_update = {'id': 100, 'workItemId': 24143, 'rev': 100, 'revisedDate': '9999-01-01T00:00:00Z',
+                    'revisedBy': {'displayName': 'Service Account'}, 'fields': {
+                        'System.ChangedBy': {'newValue': {'id': 'joy', 'displayName': 'Joy Cheng'}},
+                        'System.ChangedDate': {'newValue': '2026-03-23T22:59:39.49Z'},
+                        'System.AreaPath': {'oldValue': 'QA Project\\Legacy', 'newValue': 'QA Project\\HYSYS'},
+                        'System.IterationPath': {'newValue': 'QA Project\\Sprint 1'},
+                        'System.AssignedTo': {'oldValue': {'displayName': 'Previous tester'}},
+                    }}
+    relation_update = {'id': 101, 'workItemId': 24143, 'rev': 100, 'revisedDate': '2026-03-25T08:00:00Z',
+                       'revisedBy': {'id': 'joy', 'displayName': 'Joy Cheng'}, 'relations': {
+                           'added': [{'rel': 'AttachedFile', 'url': 'https://ado.test/attachment', 'attributes': {'name': 'Plot.png'}}],
+                           'removed': [{'rel': 'System.LinkTypes.Related', 'url': 'https://ado.test/workitems/27'}],
+                           'updated': [{'rel': 'Hyperlink', 'url': 'https://example.test/', 'attributes': {'comment': 'Updated'}}],
+                       }}
+    get = Mock(side_effect=[response({'value': [create, *more, field_update]}), response({'value': [relation_update]})])
+    monkeypatch.setattr('services.test_case_browser.requests.get', get)
+    updates = browser.modification_history(24143)['updates']
+    assert len(updates) == 101
+    assert updates[0]['created'] and updates[0]['changedAt'] == '2026-03-23T10:00:00Z'
+    assert updates[0]['author'] == 'Creator'
+    field, relation = updates[-2:]
+    assert (field['id'], relation['id'], field['revision'], relation['revision']) == (100, 101, 100, 100)
+    assert field['changedAt'] == '2026-03-23T22:59:39.49Z'
+    assert field['author'] == 'Joy Cheng' and field['authorId'] == 'joy'
+    assert [(f['label'], f['before'], f['after']) for f in field['fields']] == [
+        ('Area Path', 'QA Project\\Legacy', 'QA Project\\HYSYS'),
+        ('Iteration Path', None, 'QA Project\\Sprint 1'),
+        ('Assigned To', {'displayName': 'Previous tester'}, None),
+    ]
+    assert relation['changedAt'] == '2026-03-25T08:00:00Z'
+    assert [(r['operation'], r['type'], r['name']) for r in relation['relations']] == [
+        ('added', 'AttachedFile', 'Plot.png'), ('removed', 'System.LinkTypes.Related', None),
+        ('updated', 'Hyperlink', None),
+    ]
+    browser.client.read_work_items.assert_called_once_with([24143])
+    assert [call.kwargs['params']['$skip'] for call in get.call_args_list] == [0, 100]
+    assert all(call.args[0].endswith('/_apis/wit/workItems/24143/updates') for call in get.call_args_list)
+    assert all(call.kwargs['allow_redirects'] is False and call.kwargs['headers'] == browser.client.headers
+               for call in get.call_args_list)
+
+
+def test_modification_history_route_and_bad_pages(browser, monkeypatch):
+    app = create_app()
+    api = app.test_client()
+    browser.client.read_work_items = Mock(return_value=[item(24143, project='Different project')])
+    browser._get = Mock()
+    monkeypatch.setattr('routes.work_item_routes.get_ado_client', lambda: browser.client)
+    monkeypatch.setattr(CaseBrowser, '_get', browser._get)
+    path = '/api/work-items/test-cases/24143/modification-history'
+    assert api.get(path).status_code == 404
+    browser._get.assert_not_called()
+    browser.client.read_work_items.return_value = [item(24143)]
+    browser._get.return_value = {'value': [{'id': 1, 'workItemId': 100}]}
+    assert api.get(path).status_code == 400
+    browser._get.return_value = {'value': [{'id': 11, 'workItemId': 24143}] * 100}
+    assert api.get(path).get_json()['error'] == 'Azure DevOps work item updates did not advance.'
+    browser._get.return_value = {'value': [{'id': 1, 'workItemId': 24143, 'rev': 1, 'revisedDate': '9999-01-01T00:00:00Z'}]}
+    response = api.get(path)
+    assert response.status_code == 200
+    assert response.get_json()['updates'][0]['created']
+    assert response.get_json()['updates'][0]['changedAt'] is None
+    assert describe_update({'id': 10, 'revisedDate': '9999-01-01T00:00:00Z', 'fields': {
+        'System.AuthorizedDate': {'newValue': '2026-03-23T09:00:00Z'},
+    }})['changedAt'] == '2026-03-23T09:00:00Z'
+
+
+def test_step_comparison_distinguishes_edits_insertions_removals_and_reordering():
+    before = '''<steps>
+      <step id="2"><parameterizedString isformatted="false">Load &lt;Old Plant.hsc&gt; &amp; inspect "Flow"</parameterizedString><parameterizedString>Ready</parameterizedString></step>
+      <step id="3"><parameterizedString>Open plot</parameterizedString><parameterizedString>Originally visible</parameterizedString></step>
+      <step id="4"><parameterizedString>Close window</parameterizedString></step>
+      <step id="5"><parameterizedString>Last</parameterizedString></step></steps>'''
+    after = '''<steps>
+      <step id="3"><parameterizedString>Open plot</parameterizedString><parameterizedString>Visible</parameterizedString></step>
+      <step id="2"><parameterizedString>&lt;div&gt;Load &amp;lt;LNG Plant Simulation.hsc&amp;gt; &amp;amp; inspect "Flow"&lt;/div&gt;</parameterizedString><parameterizedString>Ready</parameterizedString></step>
+      <step id="6"><parameterizedString>Save window</parameterizedString></step>
+      <step id="5"><parameterizedString>Last</parameterizedString></step></steps>'''
+    cases = compare_steps(before, after)['changes']
+    assert len(cases) == 4
+    expected_change, action_change, added, removed = cases
+    assert expected_change['moved'] and expected_change['before']['number'] == '2' and expected_change['after']['number'] == '1'
+    assert expected_change['before']['expected'] == 'Originally visible'
+    assert expected_change['after']['expected'] == 'Visible'
+    assert action_change['moved'] and action_change['before']['number'] == '1' and action_change['after']['number'] == '2'
+    assert action_change['before']['action'] == 'Load &lt;Old Plant.hsc&gt; &amp; inspect "Flow"'
+    assert action_change['after']['action'] == '<div>Load &lt;LNG Plant Simulation.hsc&gt; &amp; inspect "Flow"</div>'
+    assert added['before'] is None and added['after']['action'] == 'Save window'
+    assert removed['after'] is None and removed['before']['action'] == 'Close window'
+
+    inserted = before.replace('<steps>', '<steps><step id="7"><parameterizedString>Prep</parameterizedString></step>')
+    changes = compare_steps(before, inserted)['changes']
+    assert len(changes) == 1 and changes[0]['before'] is None and changes[0]['after']['number'] == '1'
+
+
+def test_step_comparison_handles_empty_unreadable_missing_identity_and_shared_steps():
+    valid = '<steps><step id="2"><parameterizedString>Set variables</parameterizedString></step></steps>'
+    assert compare_steps(None, '')['changes'] == []
+    assert compare_steps(valid, None)['changes'][0]['after'] is None
+    for malformed in ['<steps><step>', '<unrecognized />', 42, '<!DOCTYPE steps [<!ENTITY sample "x">]><steps/>']:
+        comparison = compare_steps(malformed, valid)
+        assert comparison['warning'] and comparison['before'] is None and comparison['after'][0]['action'] == 'Set variables'
+    for unstable in [valid.replace(' id="2"', ''), valid.replace('</steps>', '<step id="2"/></steps>')]:
+        comparison = compare_steps(unstable, valid)
+        assert comparison['warning'] and comparison['before'][0]['action'] == 'Set variables'
+    old_shared = '<steps><compref id="11" ref="100"/></steps>'
+    new_shared = '<steps><compref id="11" ref="200"/></steps>'
+    comparison = compare_steps(old_shared, new_shared)
+    assert comparison['note']
+    assert any(row['after'] and '#200' in row['after']['action'] for row in comparison['changes'])
+    assert any(row['before'] and '#100' in row['before']['action'] for row in comparison['changes'])
