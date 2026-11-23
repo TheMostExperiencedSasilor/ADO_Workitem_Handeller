@@ -65,9 +65,15 @@ function results(count = 2) {
 
 test('search pagination, one-case radios, keyboard tabs, lazy history and load more', async () => {
   const { $, context, calls, submit, json, details, flush, findAll } = loadBrowser();
-  context.respond = async (url) => json(url.endsWith('/search') ? results(12) : url.includes('/history')
-    ? { history: [{ testSuite: 'Suite', testPlan: 'Plan', result: 'Passed', loggedDate: '2026-11-01T08:00:00Z', tester: 'Actual tester' }], nextSkip: url.endsWith('skip=0') ? 50 : null }
-    : details(Number(url.split('/').pop())));
+  context.respond = async (url) => {
+    if (url.endsWith('/search')) return json(results(12));
+    if (url.endsWith('/modification-history')) return json({ updates: [] });
+    if (url.includes('/history')) return json({
+      history: [{ testSuite: 'Suite', testPlan: 'Plan', result: 'Passed', loggedDate: '2026-11-01T08:00:00Z', tester: 'Actual tester' }],
+      nextSkip: url.endsWith('skip=0') ? 50 : null,
+    });
+    return json(details(Number(url.split('/').pop())));
+  };
   $('tcQuery').value = '12 34'; $('tcMode').value = 'flexible';
   await submit();
   assert.deepEqual(JSON.parse(calls[0][1].body), { field: 'id', mode: 'flexible', query: '12 34' });
@@ -81,7 +87,12 @@ test('search pagination, one-case radios, keyboard tabs, lazy history and load m
   assert.equal(radio.type, 'radio'); assert.equal(radio.name, 'tcSelection');
   await radio.listeners.change();
   assert.equal($('tcSelected').hidden, false);
-  assert.equal(calls.filter(([url]) => url.includes('/history')).length, 0);
+  assert.equal($('tcDetailsTab').attributes['aria-selected'], 'true');
+  assert.equal($('tcDetails').hidden, false);
+  assert.equal($('tcModHistory').hidden, true);
+  assert.equal($('tcHistory').hidden, true);
+  assert.equal(calls.filter(([url]) => url.includes('history')).length, 0);
+  $('tcModHistoryTab').listeners.click();
   assert.equal($('tcModHistoryTab').attributes['aria-selected'], 'true');
   assert.ok(calls.some(([url]) => url.endsWith('/1/modification-history')));
   $('tcModHistoryTab').listeners.keydown({ key: 'ArrowRight', preventDefault() {} });
@@ -95,7 +106,9 @@ test('search pagination, one-case radios, keyboard tabs, lazy history and load m
   assert.equal($('tcHistoryMore').hidden, true);
   await $('tcResultRows').children[1].children[0].children[0].listeners.change();
   assert.equal($('tcSelectedId').textContent, 'TEST CASE 2');
+  assert.equal($('tcDetailsTab').attributes['aria-selected'], 'true');
   assert.equal($('tcHistoryRows').children.length, 0);
+  assert.equal(calls.filter(([url]) => url.includes('/2/') && url.includes('history')).length, 0);
   const selected = findAll($('tcResultRows'), (element) => element.type === 'radio' && element.checked);
   assert.equal(selected.length, 1); assert.equal(selected[0].value, '2');
 });
@@ -432,8 +445,10 @@ test('late modification history from a previous case cannot overwrite the select
   };
   await submit();
   await $('tcResultRows').children[0].children[0].children[0].listeners.change();
+  $('tcModHistoryTab').listeners.click();
   assert.equal($('tcModHistoryProgress').hidden, false);
   await $('tcResultRows').children[1].children[0].children[0].listeners.change();
+  $('tcModHistoryTab').listeners.click();
   finishFirst();
   await flush();
   assert.equal($('tcSelectedId').textContent, 'TEST CASE 2');

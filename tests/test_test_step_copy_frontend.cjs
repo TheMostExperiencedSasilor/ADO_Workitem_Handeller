@@ -80,7 +80,6 @@ async function openCase(page) {
 
 async function selectCase(page) {
   await openCase(page);
-  await page.getByRole('tab', { name: 'Details', exact: true }).click();
   await page.getByRole('button', { name: 'Copy All Steps' }).waitFor();
 }
 
@@ -304,7 +303,7 @@ browserTest('keeps reopened drafts independent of pending and invalid AI results
   assert.equal(aiCalls(), 2);
 });
 
-browserTest('history tabs default to modifications and preserve execution filters and paging', async ({ page, calls, mocks }) => {
+browserTest('case selection opens Details and the history tabs preserve execution filters and paging', async ({ page, calls, mocks }) => {
   const update = (id, props) => ({ id, revision: id, author: 'Service Account', authorId: 'service',
     changedAt: '2026-03-22T10:00:00Z', fields: [], relations: [], ...props });
   const step = (action) => ({ number: '1', action, expected: 'Case loads' });
@@ -344,6 +343,11 @@ browserTest('history tabs default to modifications and preserve execution filter
   const timeline = page.getByRole('region', { name: 'Revision timeline' });
   const details = page.getByRole('region', { name: 'Revision details' });
   const active = timeline.locator('[aria-current="true"]');
+  await page.getByRole('tabpanel', { name: 'Details', exact: true }).waitFor();
+  assert.equal(await page.getByRole('tab', { name: 'Details', exact: true }).getAttribute('aria-selected'), 'true');
+  assert.equal(await mods.getAttribute('aria-selected'), 'false');
+  assert.equal(calls.filter(([url]) => url.includes('history')).length, 0);
+  await mods.click();
   await details.getByText('Step 1 updated').waitFor();
   assert.equal(await mods.getAttribute('aria-selected'), 'true');
   assert.deepEqual(await page.locator('.tc-icon-tab').evaluateAll((tabs) => tabs.map(
@@ -415,6 +419,7 @@ browserTest('modification history displays loading, retry and empty states', asy
     finish = () => resolve(route.fulfill({ status: 403, json: { error: 'ADO access denied.' } }));
   });
   await openCase(page);
+  await page.getByRole('tab', { name: 'Modification History', exact: true }).click();
   await page.getByRole('progressbar', { name: 'Loading modification history' }).waitFor();
   await finish();
   await page.getByText('ADO access denied.').waitFor();

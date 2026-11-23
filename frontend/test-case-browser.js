@@ -239,7 +239,7 @@
     layout.append(main, planning); $('tcDetails').appendChild(layout);
     $('tcSelected').hidden = false;
     modifications.reset(data.id, fields);
-    activateTab('tcModHistory');
+    activateTab('tcDetails');
   }
   async function selectCase(id) {
     clearSelection(); state.selected = id; const version = state.version;
