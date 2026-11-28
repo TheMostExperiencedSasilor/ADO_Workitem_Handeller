@@ -17,6 +17,14 @@ test('planner keeps Test Case ID as the first real data column', () => {
   assert.match(css, /planner-table:not\(\.selection-mode\) \.planner-selection-cell[\s\S]*width:\s*0\s*!important/);
 });
 
+test('Automation Test Tool is populated and filterable in the planner', () => {
+  assert.match(planner, /data-label="Automation Test Tool"/);
+  assert.match(planner, /id="plannerFilterAutomationTestTool"/);
+  assert.match(planner, /automationTestToolFromFields\(fields\)/);
+  assert.match(planner, /includes\(row\.automationTestTool, filters\.automationTestTool\.value\)/);
+  assert.match(planner, /row\.automationTestTool \|\| ''/);
+});
+
 test('planner wraps normal text but keeps Test Case IDs and status intact', () => {
   assert.match(css, /overflow-wrap:\s*anywhere\s*!important/);
   assert.match(css, /td:nth-child\(2\)[\s\S]*white-space:\s*nowrap\s*!important/);
@@ -24,6 +32,7 @@ test('planner wraps normal text but keeps Test Case IDs and status intact', () =
 });
 
 test('column resize updates colgroup, every real cell and total table width', () => {
+  assert.match(js, /DEFAULT_WIDTHS = \[145, 560, 155, 230, 240, 220\]/);
   assert.match(js, /setExactWidth\(cols\[index \+ 1\], width\)/);
   assert.match(js, /querySelectorAll\(`tr > :nth-child\(\$\{position\}\)`\)/);
   assert.match(js, /setExactWidth\(cell, width\)/);

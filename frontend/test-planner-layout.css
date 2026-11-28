@@ -63,9 +63,11 @@
 .planner-table td:nth-child(3),
 .planner-table td:nth-child(5),
 .planner-table td:nth-child(6),
+.planner-table td:nth-child(7),
 .planner-table th:nth-child(3),
 .planner-table th:nth-child(5),
-.planner-table th:nth-child(6) {
+.planner-table th:nth-child(6),
+.planner-table th:nth-child(7) {
   white-space: normal !important;
   overflow-wrap: anywhere !important;
 }

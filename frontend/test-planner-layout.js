@@ -1,8 +1,8 @@
 (() => {
   'use strict';
 
-  const DEFAULT_WIDTHS = [145, 560, 155, 230, 240];
-  const MIN_WIDTHS = [120, 220, 120, 160, 180];
+  const DEFAULT_WIDTHS = [145, 560, 155, 230, 240, 220];
+  const MIN_WIDTHS = [120, 220, 120, 160, 180, 160];
 
   const initialize = () => {
     const table = document.querySelector('#plannerTable');

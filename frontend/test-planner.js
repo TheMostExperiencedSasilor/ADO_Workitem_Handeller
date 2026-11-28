@@ -23,7 +23,7 @@
     generatedPlaylist: '',
     generatedMeta: null,
     rowHeights: new Map(),
-    columnWidths: [145, 560, 155, 230, 240],
+    columnWidths: [145, 560, 155, 230, 240, 220],
   };
 
   const plannerTab = document.querySelector('#testResultsPlannerTab');
@@ -63,18 +63,22 @@
     return 'Active';
   };
 
-  const productAreaFromFields = (fields) => {
+  const fieldValueFromFields = (fields, fieldName) => {
+    const normalizedName = normalize(fieldName);
     for (const [referenceName, value] of Object.entries(fields || {})) {
       const tail = referenceName.split('.').pop() || referenceName;
       const normalizedTail = normalize(tail);
       const normalizedFull = normalize(referenceName);
-      if (normalizedTail !== 'productarea' && !normalizedFull.includes('productarea')) continue;
+      if (normalizedTail !== normalizedName && !normalizedFull.includes(normalizedName)) continue;
       if (value == null) return '';
       if (typeof value === 'object') return String(value.displayName || value.name || value.value || '');
       return String(value);
     }
     return '';
   };
+
+  const productAreaFromFields = (fields) => fieldValueFromFields(fields, 'Product Area');
+  const automationTestToolFromFields = (fields) => fieldValueFromFields(fields, 'Automation Test Tool');
 
   const buildTestRule = (methodName, className, indent) => {
     const fqn = `${CONFIG.namespace}.${className}.${methodName}`;
@@ -206,7 +210,7 @@
       <div class="test-suite-table-wrap planner-table-wrap" tabindex="0" role="region" aria-label="Test planner table">
         <table id="plannerTable" class="test-suite-table planner-table">
           <caption>Current Execute-page planning data</caption>
-          <colgroup id="plannerColumns"><col class="planner-selection-col"><col><col><col><col><col></colgroup>
+          <colgroup id="plannerColumns"><col class="planner-selection-col"><col><col><col><col><col><col></colgroup>
           <thead>
             <tr class="planner-header-row">
               <th class="planner-selection-cell" scope="col" aria-label="Select"></th>
@@ -215,6 +219,7 @@
               <th scope="col" data-planner-column="2" data-label="Status">Status</th>
               <th scope="col" data-planner-column="3" data-label="Product Area">Product Area</th>
               <th scope="col" data-planner-column="4" data-label="Current Tester">Current Tester</th>
+              <th scope="col" data-planner-column="5" data-label="Automation Test Tool">Automation Test Tool</th>
             </tr>
             <tr class="planner-filter-row">
               <th class="planner-selection-cell"></th>
@@ -223,6 +228,7 @@
               <th><select id="plannerFilterStatus" aria-label="Filter Status"><option value="">All statuses</option><option>Passed</option><option>Active</option><option>Failed</option></select></th>
               <th><input id="plannerFilterProductArea" type="search" aria-label="Filter Product Area" placeholder="Filter product area"></th>
               <th><input id="plannerFilterTester" type="search" aria-label="Filter Current Tester" placeholder="Filter tester"></th>
+              <th><input id="plannerFilterAutomationTestTool" type="search" aria-label="Filter Automation Test Tool" placeholder="Filter automation test tool"></th>
             </tr>
           </thead>
           <tbody id="plannerRows"></tbody>
@@ -283,6 +289,7 @@
     status: plannerPanel.querySelector('#plannerFilterStatus'),
     productArea: plannerPanel.querySelector('#plannerFilterProductArea'),
     tester: plannerPanel.querySelector('#plannerFilterTester'),
+    automationTestTool: plannerPanel.querySelector('#plannerFilterAutomationTestTool'),
   };
 
   const normalTabs = [
@@ -412,7 +419,8 @@
       && includes(row.title, filters.title.value)
       && (!filters.status.value || row.status === filters.status.value)
       && includes(row.productArea, filters.productArea.value)
-      && includes(row.tester || 'Unassigned', filters.tester.value);
+      && includes(row.tester || 'Unassigned', filters.tester.value)
+      && includes(row.automationTestTool, filters.automationTestTool.value);
   };
 
   const renderRows = () => {
@@ -439,7 +447,7 @@
       selectionCell.appendChild(checkbox);
       tr.appendChild(selectionCell);
 
-      const values = [row.testCaseId, row.title, row.status, row.productArea || '', row.tester || 'Unassigned'];
+      const values = [row.testCaseId, row.title, row.status, row.productArea || '', row.tester || 'Unassigned', row.automationTestTool || ''];
       values.forEach((value, index) => {
         const td = document.createElement('td');
         if (index === 2) {
@@ -486,6 +494,7 @@
         byId.set(String(item.id), {
           title: String(fields['System.Title'] || ''),
           productArea: productAreaFromFields(fields),
+          automationTestTool: automationTestToolFromFields(fields),
         });
       }
     }
@@ -549,6 +558,7 @@
           status: plannerStatus(point.outcome),
           productArea: item.productArea || '',
           tester: point.tester || '',
+          automationTestTool: item.automationTestTool || '',
           pointIndex: index,
         };
       });
@@ -570,7 +580,7 @@
 
   plannerPanel.querySelector('#plannerClearFiltersButton').addEventListener('click', clearFilters);
   plannerPanel.querySelector('#plannerResetSizesButton').addEventListener('click', () => {
-    state.columnWidths = [145, 560, 155, 230, 240];
+    state.columnWidths = [145, 560, 155, 230, 240, 220];
     state.rowHeights.clear();
     renderRows();
   });
